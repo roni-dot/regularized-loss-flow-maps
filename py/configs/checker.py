@@ -45,6 +45,14 @@ def get_config(
     config.training.ema_facs = [0.999, 0.9999]
     config.training.ndevices = jax.device_count()
 
+    # monge gap config
+    config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
+    config.training.mg_batch_size = 512  # Batch size for Monge gap computation
+    config.training.lambda_reg = 0.0
+    config.training.sinkhorn_max_iter = 200
+    config.training.sinkhorn_relative_epsilon = True
+    config.training.sinkhorn_eps = 1e-3
+
     # problem config - Checker specific
     config.problem = ml_collections.ConfigDict()
     config.problem.n = int(1e7)  # 10M samples for checker

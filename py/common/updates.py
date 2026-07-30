@@ -33,20 +33,23 @@ def setup_train_step(cfg: config_dict.ConfigDict) -> Callable:
     @decorator
     def train_step(
         state: state_utils.EMATrainState,
-        loss_func: Callable[[Parameters], float],
+        loss_func: Callable[[Parameters], Tuple[float, Dict]],
         loss_func_args=tuple(),
-    ) -> Tuple[state_utils.EMATrainState, float, Parameters]:
+    ) -> Tuple[state_utils.EMATrainState, float, Parameters, Dict]:
         """Single training step for the neural network.
 
         Args:
             state: Training state.
-            loss_func: Loss function for the parameters.
+            loss_func: Loss function returning (loss_scalar, aux_dict).
             loss_func_args: Argument other than the parameters for the loss function.
         """
-        loss_value, grads = value_and_grad(loss_func)(state.params, *loss_func_args)
+        (loss_value, aux), grads = value_and_grad(loss_func, has_aux=True)(
+            state.params, *loss_func_args
+        )
 
         if cfg.training.ndevices > 1:
             loss_value = jax.lax.pmean(loss_value, axis_name="data")
+            aux = jax.lax.pmean(aux, axis_name="data")
             grads = jax.lax.pmean(grads, axis_name="data")
 
         state = state.apply_gradients(grads=grads)
@@ -54,7 +57,7 @@ def setup_train_step(cfg: config_dict.ConfigDict) -> Callable:
         # project for the edm2 network
         state = state.replace(params=edm2_net.safe_project_to_sphere(cfg, state.params))
 
-        return state, loss_value, grads
+        return state, loss_value, grads, aux
 
     return train_step
 

@@ -87,7 +87,9 @@ def get_loss_fn_args_randomness(
         ukey,
         x0key,
         tkey2,
-    ) = jax.random.split(prng_key, num=5)
+        mg_key,
+        mg_x0key,
+    ) = jax.random.split(prng_key, num=7)
     x0batch = sample_rho0(cfg.optimization.bs, x0key)
 
     bs = cfg.optimization.bs
@@ -134,6 +136,14 @@ def get_loss_fn_args_randomness(
         (cfg.optimization.bs, -1)
     )
     prng_key = jax.random.split(dropout_keys[0])[0]
+
+    # Sample K independent (s, t) pairs for the Monge gap.
+    # plus its own base point cloud shared across all K pairs.
+    mg_s_vec, mg_t_vec = _sample_mg_pairs(
+        mg_key, cfg.training.monge_num_pairs, tmin, tmax
+    )
+    mg_x0 = sample_rho0(cfg.training.mg_batch_size, mg_x0key)
+
     return (
         tbatch,
         sbatch,
@@ -142,6 +152,9 @@ def get_loss_fn_args_randomness(
         x0batch,
         dropout_keys,
         prng_key,
+        mg_x0,
+        mg_s_vec,
+        mg_t_vec,
     )
 
 
@@ -201,6 +214,9 @@ def get_loss_fn_args(
         x0batch,
         dropout_keys,
         prng_key,
+        mg_x0,
+        mg_s_vec,
+        mg_t_vec,
     ) = get_loss_fn_args_randomness(
         prng_key,
         cfg,
@@ -215,6 +231,9 @@ def get_loss_fn_args(
     # set up the teacher (uses current params for self-distillation)
     teacher_params = train_state.params
 
+    # Monge gap target slice: take first mg_batch_size samples (min(bs, mg_batch_size)) from the dataset batch
+    mg_x1 = x1batch[: min(bs, cfg.training.mg_batch_size)]
+
     # for training flow map
     loss_fn_args = (
         x0batch,
@@ -225,8 +244,33 @@ def get_loss_fn_args(
         ubatch,
         hbatch,
         dropout_keys,
+        mg_x0,
+        mg_x1,
     )
     loss_fn_args = dist_utils.replicate_loss_fn_args(cfg, loss_fn_args)
-    loss_fn_args = (teacher_params, *loss_fn_args)
+    # NOTE: mg_s_vec, mg_t_vec are (K,) group-level values, not per-sample data.
+    # replicate_batch's reshape assumes a per-sample leading axis, so these are
+    # appended AFTER replicate and only behave correctly for ndevices == 1
+    # (checker experiments).
+    loss_fn_args = (teacher_params, *loss_fn_args, mg_s_vec, mg_t_vec)
 
     return loss_fn_args, prng_key
+
+def _sample_mg_pairs(
+    key: jnp.ndarray, K: int, tmin: float, tmax: float
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Sample K independent (s, t) pairs, each s <= t, for the Monge gap regularizer.
+
+    Each pair is applied to the SAME base point cloud (mg_x0, mg_x1) elsewhere;
+    this function only produces the K independent time pairs.
+    """
+    keys = jax.random.split(key, num=2 * K).reshape(2, K, -1)
+    keys1, keys2 = keys[0], keys[1]
+
+    def _one_pair(k1, k2):
+        raw1 = jax.random.uniform(k1, minval=tmin, maxval=tmax)
+        raw2 = jax.random.uniform(k2, minval=tmin, maxval=tmax)
+        return jnp.minimum(raw1, raw2), jnp.maximum(raw1, raw2)
+
+    s_vec, t_vec = jax.vmap(_one_pair)(keys1, keys2)  # each shape (K,)
+    return s_vec, t_vec

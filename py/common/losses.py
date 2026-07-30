@@ -15,6 +15,7 @@ from ml_collections import config_dict
 from . import flow_map as flow_map
 from . import interpolant as interpolant
 from . import loss_args
+from . import monge_gap_reg
 
 Parameters = Dict[str, Dict]
 
@@ -379,8 +380,23 @@ def setup_loss(
         else:
             raise ValueError(f"Unknown loss_type: {cfg.training.loss_type}")
 
-    def loss(params, teacher_params, x0, x1, label, s, t, u, h, dropout_keys):
-        """Split batch into diagonal and off-diagonal portions."""
+    def loss(
+            params,
+            teacher_params,
+            x0,
+            x1,
+            label,
+            s,
+            t,
+            u,
+            h,
+            dropout_keys,
+            mg_x0,
+            mg_x1,
+            mg_s_vec,
+            mg_t_vec,
+        ):
+        """Split batch into diagonal and off-diagonal portions, then add Monge gap."""
         total_bs = x0.shape[0]
         diag_bs, offdiag_bs = loss_args._get_diag_offdiag_bs(cfg, total_bs)
 
@@ -419,7 +435,28 @@ def setup_loss(
             )
             total_loss += offdiag_loss * offdiag_bs
 
-        # Normalize by total batch size
-        return total_loss / total_bs
+        base_loss = total_loss / total_bs
+
+        # Monge gap regularizer — agnostic to cfg.training.loss_type, so this
+        # applies identically whether loss_type is lsd, psd, or esd.
+        if cfg.training.lambda_reg > 0.0:
+            mg_val = monge_gap_reg.compute_monge_gap_reg(
+                params,
+                net,
+                interp,
+                mg_x0,
+                mg_x1,
+                mg_s_vec,
+                mg_t_vec,
+                epsilon=cfg.training.sinkhorn_eps,
+                relative_epsilon=cfg.training.sinkhorn_relative_epsilon,
+                max_iterations=cfg.training.sinkhorn_max_iter,
+            )
+            total = base_loss + cfg.training.lambda_reg * mg_val
+        else:
+            mg_val = jnp.array(0.0)
+            total = base_loss
+
+        return total, {"base_loss": base_loss, "monge_gap": mg_val}
 
     return loss

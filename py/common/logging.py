@@ -292,6 +292,7 @@ def log_metrics(
     loss_fn_args: Tuple,
     prng_key: jnp.ndarray,
     step_time: float,
+    aux: dict = None,
 ) -> jnp.ndarray:
     """Log some metrics to wandb, make a figure, and checkpoint the parameters."""
 
@@ -307,6 +308,14 @@ def log_metrics(
         f"learning_rate": learning_rate,
         f"step_time": step_time,
     }
+
+    # Monge gap auxiliary metrics — fixed keys regardless of loss_type, so
+    # this needs no changes across LSD/PSD/ESD experiments.
+    if aux is not None:
+        if "base_loss" in aux:
+            metrics["base_loss"] = float(dist_utils.safe_index(cfg, aux["base_loss"]))
+        if "monge_gap" in aux:
+            metrics["monge_gap"] = float(dist_utils.safe_index(cfg, aux["monge_gap"]))
 
     # Compute FID on-the-fly if enabled and at the right frequency
     if (
@@ -541,7 +550,7 @@ def make_loss_fn_args_plot(
     """Make a plot of the loss function arguments."""
     # unpack the full loss arguments
     data_args = loss_fn_args[1:]
-    (x0batch, x1batch, _, sbatch, tbatch, _, _, _) = (
+    (x0batch, x1batch, _, sbatch, tbatch, _, _, _, _, _, _, _) = (
         dist_utils.unreplicate_loss_fn_args(cfg, data_args)
     )
 

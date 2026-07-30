@@ -46,7 +46,6 @@ import wandb
 from ml_collections import config_dict  # type: ignore
 from tqdm.auto import tqdm as tqdm
 
-Parameters = Dict[str, Dict]
 mpl.rc_file(f"{pathlib.Path(__file__).resolve().parent}/matplotlibrc")
 
 
@@ -67,7 +66,7 @@ def train_loop(
         )
 
         # take a step on the loss
-        train_state, loss_value, grads = statics.train_step(
+        train_state, loss_value, grads, aux = statics.train_step(
             train_state, statics.loss, loss_fn_args
         )
         end_time = time.time()
@@ -85,6 +84,7 @@ def train_loop(
             loss_fn_args,
             prng_key,
             end_time - start_time,
+            aux,
         )
 
         pbar.set_postfix(loss=loss_value)
@@ -102,15 +102,51 @@ def parse_command_line_arguments():
     parser.add_argument("--slurm_id", type=int)
     parser.add_argument("--dataset_location", type=str)
     parser.add_argument("--output_folder", type=str)
+    parser.add_argument(
+        "--lambda_reg_override",
+        type=float,
+        default=None,
+        help="Override config.training.lambda_reg",
+    )
+    parser.add_argument(
+        "--mg_batch_override",
+        type=int,
+        default=None,
+        help="Override config.training.mg_batch_size",
+    )
+    parser.add_argument(
+        "--sinkhorn_eps_override",
+        type=float,
+        default=None,
+        help="Override config.training.sinkhorn_eps",
+    )
+    parser.add_argument(
+        "--monge_num_pairs_override",
+        type=int,
+        default=None,
+        help="Override config.training.monge_num_pairs",
+    )
     return parser.parse_args()
 
 
 def setup_config_dict():
     args = parse_command_line_arguments()
     cfg_module = importlib.import_module(args.cfg_path)
-    return cfg_module.get_config(
+    cfg = cfg_module.get_config(
         args.slurm_id, args.dataset_location, args.output_folder
     )
+
+    # apply CLI overrides for monge-gap sweep parameters, if provided
+    if args.lambda_reg_override is not None:
+        cfg.training.lambda_reg = args.lambda_reg_override
+    if args.mg_batch_override is not None:
+        cfg.training.mg_batch_size = args.mg_batch_override
+    if args.sinkhorn_eps_override is not None:
+        cfg.training.sinkhorn_eps = args.sinkhorn_eps_override
+    if args.monge_num_pairs_override is not None:
+        cfg.training.monge_num_pairs = args.monge_num_pairs_override
+
+    return cfg
 
 
 def setup_state(cfg: config_dict.ConfigDict, prng_key: jnp.ndarray) -> Tuple[

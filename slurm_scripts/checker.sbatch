@@ -1,29 +1,29 @@
 #!/bin/bash
-#SBATCH --job-name=checker_loss_comp
-#SBATCH --account=kempner_albergo_lab
-#SBATCH --partition=kempner  # Regular kempner partition with A100s
+#SBATCH --partition rtx6000
+#SBATCH --time 2-00:00:00
+#SBATCH --job-name checker_baseline
+#SBATCH --output checker_baseline-%A_%a.out
+#SBATCH --error=checker_baseline-%A_%a.err
+#SBATCH --mail-user=ronimaor@post.bgu.ac.il
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --gres=gpu:rtx_6000:1
+#SBATCH --qos=pakman
+#SBATCH --account=ronimaor
+#SBATCH --array=0-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=0-12:00:00  # 12 hours should be enough for checker
-#SBATCH --gres=gpu:1  # Single A100 GPU
-#SBATCH --mem=32GB  # Less memory needed for 2D problem
-#SBATCH --output=/n/netscratch/albergo_lab/Everyone/nmboffi/checker/logs/loss_method_%A_%a.out
-#SBATCH --error=/n/netscratch/albergo_lab/Everyone/nmboffi/checker/logs/loss_method_%A_%a.err
-#SBATCH --array=0-3  # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
-
-## Create output directories if they don't exist (using netscratch for more space)
-mkdir -p /n/netscratch/albergo_lab/Everyone/nmboffi/checker/logs
+#SBATCH --mem=32GB
 
 ## Configuration
-PY_DIR=/n/home04/nboffi/flow-maps/py
+PY_DIR=/path/to/flow-maps/py            # <-- update to your actual path
 CONFIG_PATH="configs.checker"
-OUTPUT_FOLDER="/n/netscratch/albergo_lab/Everyone/nmboffi/checker"
+OUTPUT_FOLDER="/path/to/outputs/checker_baseline"   # <-- update to your actual path
 
-# Map array task ID to experiment
+mkdir -p "${OUTPUT_FOLDER}"
+
 SLURM_ID=${SLURM_ARRAY_TASK_ID}
 
-# Get experiment details for logging
 case ${SLURM_ID} in
     0)
         METHOD="LSD"
@@ -47,9 +47,8 @@ case ${SLURM_ID} in
         ;;
 esac
 
-# Print job info
 echo "=========================================="
-echo "Checker Loss Method Comparison Training"
+echo "Checker Baseline Reproduction (Monge gap disabled)"
 echo "SLURM Job ID: ${SLURM_JOB_ID}"
 echo "SLURM Array Task ID: ${SLURM_ARRAY_TASK_ID}"
 echo "Method: ${METHOD}"
@@ -59,44 +58,37 @@ echo "Sampling: uniform_upper_triangle (half plane)"
 echo "Diagonal Fraction: 0.75 (75%)"
 echo "Batch Size: 100,000"
 echo "Total Steps: 100,000"
+echo "lambda_reg: 0.0 (Monge gap disabled, true no-op)"
 echo "Config: ${CONFIG_PATH}"
 echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
 
-# Load modules
 module purge
-module load gcc/12.2.0-fasrc01
-
-# Hook conda/mamba into the shell and activate env
+module load gcc/12.2.0-fasrc01          # <-- adjust if your cluster module differs
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate jax_3_17_25
+conda activate jax_3_17_25              # <-- adjust to your env name
 
-# Fix library path to prioritize conda environment libraries over system ones
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 
-# Change to project directory
 cd $PY_DIR || exit
 
 echo "Starting training..."
-echo "Time limit: 12 hours"
+echo "Time limit: 2 days"
 echo "Configuration: ${CONFIG_PATH}"
 echo "Output folder: ${OUTPUT_FOLDER}"
 echo "Dataset: Checker (2D, 10M samples)"
 echo "Network: 4-layer MLP with 512 neurons"
-echo "GPU: Single A100"
+echo "GPU: Single RTX 6000"
 
-# Run training with the specific configuration
-# Note: dataset_location not needed for checker, but keeping for consistency
 python launchers/learn.py \
     --cfg_path "${CONFIG_PATH}" \
     --slurm_id ${SLURM_ID} \
     --dataset_location "" \
-    --output_folder "${OUTPUT_FOLDER}"
+    --output_folder "${OUTPUT_FOLDER}" \
+    --lambda_reg_override 0.0
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"
 echo "  Output folder: ${OUTPUT_FOLDER}"
 echo "  WandB project: fmm2"
-echo "=========================================="
-
-exit
+echo "=======================================
