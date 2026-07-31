@@ -50,7 +50,7 @@ def get_config(
     config.training.mg_batch_size = 512  # Batch size for Monge gap computation
     config.training.lambda_reg = 0.0
     config.training.sinkhorn_max_iter = 200
-    config.training.sinkhorn_relative_epsilon = True
+    config.training.sinkhorn_relative_epsilon = "mean"
     config.training.sinkhorn_eps = 0.5
 
     # problem config - Checker specific
