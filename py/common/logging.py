@@ -20,9 +20,24 @@ from jax.flatten_util import ravel_pytree
 from matplotlib import pyplot as plt
 from ml_collections import config_dict
 
-from . import datasets, dist_utils, fid_utils, flow_map, state_utils
+from . import datasets, dist_utils, fid_utils, flow_map, monge_gap_reg, state_utils
 
 Parameters = Dict[str, Dict]
+
+
+EVAL_SEED = 20260731
+
+
+def fixed_eval_x0s(
+    statics: state_utils.StaticArgs,
+    n: int,
+    offset: int = 0,
+) -> jnp.ndarray:
+    """Draw the *same* source points on every call, so trajectory plots at
+    different checkpoints show the same particles. `offset` lets different
+    plots use different (but individually fixed) point sets.
+    """
+    return statics.sample_rho0(n, jax.random.PRNGKey(EVAL_SEED + offset))
 
 
 def get_params_for_sampling(
@@ -350,6 +365,17 @@ def log_metrics(
         except Exception as e:
             print(f"Warning: FID computation failed: {e}")
 
+    # fixed-(s,t) eval Monge gap, on the visualization cadence (one Sinkhorn
+    # solve per grid pair, so too slow for every step)
+    if (
+        getattr(cfg.training, "lambda_reg", 0.0) > 0.0
+        and (step % cfg.logging.visual_freq) == 0
+    ):
+        try:
+            metrics.update(eval_monge_gap_metrics(cfg, statics, train_state))
+        except Exception as e:
+            print(f"Warning: eval Monge gap computation failed: {e}")
+
     wandb.log(metrics)
 
     if (dist_utils.safe_index(cfg, train_state.step) % cfg.logging.visual_freq) == 0:
@@ -509,8 +535,8 @@ def make_pushforward_path_plot(
     sns.set_palette("deep")
     fontsize = 12.5
 
-    x0s = statics.sample_rho0(n_plot, prng_key)
-    prng_key = jax.random.split(prng_key)[0]
+
+    x0s = fixed_eval_x0s(statics, n_plot, offset=0)
 
     traj = compute_trajectories(train_state, params_for_visual, x0s, n_steps)
 
@@ -572,8 +598,8 @@ def make_trajectory_diagnostics_plot(
     """
     params_for_visual = get_params_for_sampling(cfg, train_state, param_type="visual")
 
-    x0s = statics.sample_rho0(n_traj, prng_key)
-    prng_key = jax.random.split(prng_key)[0]
+
+    x0s = fixed_eval_x0s(statics, n_traj, offset=1)
 
     traj = compute_trajectories(train_state, params_for_visual, x0s, n_steps)
     # flatten all non-(time, batch) dims so norms below reduce over the full
@@ -616,6 +642,71 @@ def make_trajectory_diagnostics_plot(
 
     wandb.log({"trajectory_diagnostics": wandb.Image(fig)})
     return prng_key
+
+
+def _eval_st_grid() -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """A fixed set of (s, t) pairs spanning the upper triangle s < t.
+    Held constant across checkpoints and across runs so the logged gap is a
+    single comparable number over training.
+    """
+    pairs = [
+        (0.0, 0.25), (0.0, 0.5), (0.0, 0.75), (0.0, 1.0),
+        (0.25, 0.5), (0.25, 1.0),
+        (0.5, 0.75), (0.5, 1.0),
+    ]
+    s = jnp.array([p[0] for p in pairs])
+    t = jnp.array([p[1] for p in pairs])
+    return s, t
+
+
+def eval_monge_gap_metrics(
+    cfg: config_dict.ConfigDict,
+    statics: state_utils.StaticArgs,
+    train_state: state_utils.EMATrainState,
+    n_eval: int = 512,
+) -> Dict[str, float]:
+    """Monge gap on a FIXED (s, t) grid and a FIXED source/target batch, using
+    EMA params. Training still resamples (s, t) every step -- this is only a
+    measurement, so the logged curve is comparable across checkpoints instead
+    of mixing incomparable (s, t) slices.
+
+    Reuses monge_gap_reg.compute_monge_gap_reg so eval and training cannot
+    drift apart. Returns a dict of metrics (caller logs them).
+    """
+    params = get_params_for_sampling(cfg, train_state, param_type="visual")
+
+    # fixed endpoints -> same interpolant at every checkpoint
+    mg_x0 = fixed_eval_x0s(statics, n_eval, offset=2)
+    x1 = next(statics.ds)
+    if isinstance(x1, dict):
+        x1 = x1["image"]
+    mg_x1 = jnp.asarray(x1[:n_eval])
+
+    s_vec, t_vec = _eval_st_grid()
+
+    def gap_for_pair(s, t) -> float:
+        gap = monge_gap_reg.compute_monge_gap_reg(
+            params,
+            statics.net,
+            statics.interp,
+            mg_x0,
+            mg_x1,
+            jnp.array([s]),
+            jnp.array([t]),
+            epsilon=cfg.training.sinkhorn_eps,
+            relative_epsilon=cfg.training.sinkhorn_relative_epsilon,
+        )
+        return float(gap)
+
+    metrics = {}
+    gaps = []
+    for s, t in zip(s_vec, t_vec):
+        g = gap_for_pair(s, t)
+        gaps.append(g)
+        metrics[f"eval_monge_gap/s{float(s):.2f}_t{float(t):.2f}"] = g
+
+    metrics["eval_monge_gap"] = float(np.mean(gaps))
+    return metrics
 
 
 def make_image_plot(
