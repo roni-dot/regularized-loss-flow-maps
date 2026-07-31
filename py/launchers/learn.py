@@ -126,6 +126,18 @@ def parse_command_line_arguments():
         default=None,
         help="Override config.training.monge_num_pairs",
     )
+    parser.add_argument(
+            "--wandb_project_override",
+            type=str,
+            default=None,
+            help="Override config.logging.wandb_project",
+        )
+    parser.add_argument(
+                "--wandb_name_additional",
+                type=str,
+                default=None,
+                help="Additional string to append to config.logging.wandb_name",
+            )
     return parser.parse_args()
 
 
@@ -145,6 +157,10 @@ def setup_config_dict():
         cfg.training.sinkhorn_eps = args.sinkhorn_eps_override
     if args.monge_num_pairs_override is not None:
         cfg.training.monge_num_pairs = args.monge_num_pairs_override
+    if args.wandb_project_override is not None:
+        cfg.logging.wandb_project = args.wandb_project_override
+    if args.wandb_name_additional is not None:
+        cfg.logging.wandb_name += f"_{args.wandb_name_additional}"
 
     return cfg
 

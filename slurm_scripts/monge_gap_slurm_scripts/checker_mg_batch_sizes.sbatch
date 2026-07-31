@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --partition rtx6000
 #SBATCH --time 2-00:00:00
-#SBATCH --job-name checker_baseline
-#SBATCH --output checker_baseline-%A_%a.out
-#SBATCH --error=checker_baseline-%A_%a.err
+#SBATCH --job-name checker_ms_bs_sweep
+#SBATCH --output checker_ms_bs_sweep-%A_%a.out
+#SBATCH --error=checker_ms_bs_sweep-%A_%a.err
 #SBATCH --mail-user=ronimaor@post.bgu.ac.il
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --qos=pakman
-#SBATCH --array=0-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
+#SBATCH --array=0-15   # 4 losses x 4 mg_batch values
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
@@ -17,14 +17,16 @@
 ## Configuration
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.checker"
-OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_baseline"
-PROJECT_NAME="self-distill-flow-maps-reproduce-baseline"
+OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_ms_bs_sweep"
+PROJECT_NAME="self-distill-flow-maps-mg-batch-sweep"
 
 mkdir -p "${OUTPUT_FOLDER}"
 
-SLURM_ID=${SLURM_ARRAY_TASK_ID}
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+LOSS_SLURM_ID=$(( TASK_ID / 4 ))
+MG_BATCH_IDX=$(( TASK_ID % 4 ))
 
-case ${SLURM_ID} in
+case ${LOSS_SLURM_ID} in
     0)
         METHOD="LSD"
         PFMM_TYPE="N/A"
@@ -47,10 +49,20 @@ case ${SLURM_ID} in
         ;;
 esac
 
+case ${MG_BATCH_IDX} in
+    0) MG_BATCH=128  ;;
+    1) MG_BATCH=512  ;;
+    2) MG_BATCH=1024 ;;
+    3) MG_BATCH=2048 ;;
+esac
+
+LAMBDA_REG=0.1
+EXP_NAME="${METHOD// /_}_mgbatch${MG_BATCH}"
+
 echo "=========================================="
-echo "Checker Baseline Reproduction (Monge gap disabled)"
+echo "Checker Monge Gap Sweep: loss x mg_batch"
 echo "SLURM Job ID: ${SLURM_JOB_ID}"
-echo "SLURM Array Task ID: ${SLURM_ARRAY_TASK_ID}"
+echo "SLURM Array Task ID: ${TASK_ID}  (loss_idx=${LOSS_SLURM_ID}, mg_batch_idx=${MG_BATCH_IDX})"
 echo "Method: ${METHOD}"
 echo "PFMM Type: ${PFMM_TYPE}"
 echo "Stopgrad Type: ${STOPGRAD}"
@@ -58,7 +70,9 @@ echo "Sampling: uniform_upper_triangle (half plane)"
 echo "Diagonal Fraction: 0.75 (75%)"
 echo "Batch Size: 100,000"
 echo "Total Steps: 100,000"
-echo "lambda_reg: 0.0 (Monge gap disabled, true no-op)"
+echo "mg_batch: ${MG_BATCH}"
+echo "lambda_reg: ${LAMBDA_REG}"
+echo "Experiment name: ${EXP_NAME}"
 echo "Config: ${CONFIG_PATH}"
 echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
@@ -81,14 +95,18 @@ echo "GPU: Single RTX 6000"
 
 python launchers/learn.py \
     --cfg_path "${CONFIG_PATH}" \
-    --slurm_id ${SLURM_ID} \
+    --slurm_id ${LOSS_SLURM_ID} \
     --dataset_location "" \
     --output_folder "${OUTPUT_FOLDER}" \
-    --lambda_reg_override 0.0 \
+    --lambda_reg_override ${LAMBDA_REG} \
+    --mg_batch_override ${MG_BATCH} \
     --wandb_project_override "${PROJECT_NAME}" \
+    --wandb_name_additional "${MG_BATCH}_mg_batch_size"
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"
 echo "  Output folder: ${OUTPUT_FOLDER}"
 echo "  WandB project: ${PROJECT_NAME}"
-echo "======================================="
+echo "=========================================="
+
+exit

@@ -51,7 +51,7 @@ def get_config(
     config.training.lambda_reg = 0.0
     config.training.sinkhorn_max_iter = 200
     config.training.sinkhorn_relative_epsilon = True
-    config.training.sinkhorn_eps = 1e-3
+    config.training.sinkhorn_eps = 0.5
 
     # problem config - Checker specific
     config.problem = ml_collections.ConfigDict()
@@ -85,7 +85,7 @@ def get_config(
     config.logging.plot_bs = 25_000
     config.logging.visual_freq = 5_000
     config.logging.save_freq = 10_000  # Save every 10k steps
-    config.logging.wandb_project = "self-distill-flow-maps-reproduce-baseline"
+    config.logging.wandb_project = "self-distill-flow-maps"
 
     # Create systematic name for the experiment
     method_str = f"{loss_type}_{psd_type}" if psd_type else loss_type
