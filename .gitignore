@@ -1,0 +1,6 @@
+*.out
+*.err
+*.pyc
+/outputs
+/.vscode
+*/wandb

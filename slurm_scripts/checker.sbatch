@@ -8,7 +8,6 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --qos=pakman
-#SBATCH --account=ronimaor
 #SBATCH --array=0-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -16,9 +15,9 @@
 #SBATCH --mem=32GB
 
 ## Configuration
-PY_DIR=/path/to/flow-maps/py            # <-- update to your actual path
+PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.checker"
-OUTPUT_FOLDER="/path/to/outputs/checker_baseline"   # <-- update to your actual path
+OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_baseline"
 
 mkdir -p "${OUTPUT_FOLDER}"
 
@@ -64,9 +63,9 @@ echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
 
 module purge
-module load gcc/12.2.0-fasrc01          # <-- adjust if your cluster module differs
+module load gcc/12.2.0-fasrc01
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate jax_3_17_25              # <-- adjust to your env name
+conda activate flow_maps
 
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 
@@ -90,5 +89,5 @@ python launchers/learn.py \
 echo "=========================================="
 echo "Job completed. Check the following for results:"
 echo "  Output folder: ${OUTPUT_FOLDER}"
-echo "  WandB project: fmm2"
-echo "=======================================
+echo "  WandB project: self-distill-flow-maps-reproduce-baseline"
+echo "======================================="

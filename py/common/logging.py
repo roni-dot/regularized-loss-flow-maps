@@ -355,8 +355,11 @@ def log_metrics(
     if (dist_utils.safe_index(cfg, train_state.step) % cfg.logging.visual_freq) == 0:
         if cfg.problem.target == "checker":
             prng_key = make_lowd_plot(cfg, statics, train_state, prng_key)
+            prng_key = make_pushforward_path_plot(cfg, statics, train_state, prng_key)
         else:
             prng_key = make_image_plot(cfg, statics, train_state, prng_key)
+
+        prng_key = make_trajectory_diagnostics_plot(cfg, statics, train_state, prng_key)
 
         make_loss_fn_args_plot(cfg, statics, train_state, loss_fn_args)
 
@@ -450,6 +453,168 @@ def make_lowd_plot(
             )
 
     wandb.log({"samples": wandb.Image(fig)})
+    return prng_key
+
+
+def compute_trajectories(
+    train_state: state_utils.EMATrainState,
+    params: Parameters,
+    x0s: jnp.ndarray,
+    n_steps: int,
+) -> np.ndarray:
+    """Roll out the flow map using the same (s, t) stepping as flow_map.sample,
+    keeping every intermediate position instead of only the final one.
+    Returns array of shape (n_steps + 1, n_particles, d): index 0 is x0,
+    index n_steps is the final push-forward.
+    """
+    apply_flow_map = train_state.apply_fn
+    ts = jnp.linspace(0.0, 1.0, n_steps + 1)
+    label = -1.0  # unconditional, matches -jnp.ones(...) convention elsewhere
+
+    def sample_trajectory_single(x0):
+        def step(x, idx):
+            x_next = apply_flow_map(
+                params, ts[idx], ts[idx + 1], x,
+                label=label, train=False, calc_weight=False, return_X_and_phi=False,
+            )
+            return x_next, x_next
+
+        _, traj = jax.lax.scan(step, x0, jnp.arange(n_steps))
+        return jnp.concatenate([x0[None], traj], axis=0)  # (n_steps+1, d)
+
+    batch_trajectory_fn = jax.vmap(sample_trajectory_single, in_axes=0, out_axes=1)
+    traj = batch_trajectory_fn(x0s)  # (n_steps+1, n, d)
+    return np.asarray(traj)
+
+
+def make_pushforward_path_plot(
+    cfg: config_dict.ConfigDict,
+    statics: state_utils.StaticArgs,
+    train_state: state_utils.EMATrainState,
+    prng_key: jnp.ndarray,
+    n_plot: int = 30,
+    n_steps: int = 25,
+    n_squares: int = 4,
+) -> jnp.ndarray:
+    """Plot the full particle trajectories (source -> intermediate steps ->
+    push-forward), with the exact checkerboard pattern shaded in as
+    background (matches datasets.sample_checkerboard: n_squares squares on
+    [-1,1]x[-1,1], with squares kept where (x_idx + y_idx) % 2 == 0).
+
+    Only used for low-dimensional (e.g. checker) problems.
+    """
+    params_for_visual = get_params_for_sampling(cfg, train_state, param_type="visual")
+
+    plt.close("all")
+    sns.set_palette("deep")
+    fontsize = 12.5
+
+    x0s = statics.sample_rho0(n_plot, prng_key)
+    prng_key = jax.random.split(prng_key)[0]
+
+    traj = compute_trajectories(train_state, params_for_visual, x0s, n_steps)
+
+    x0s = np.asarray(x0s)
+    pushforward = traj[-1]
+
+    fig, ax = plt.subplots(figsize=(8, 8), constrained_layout=True)
+    xlim, ylim = (-1.5, 1.5), (-1.5, 1.5)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_aspect("equal")
+    ax.tick_params(axis="both", labelsize=fontsize)
+
+    # exact checkerboard background
+    square_size = 2.0 / n_squares
+    for xi in range(n_squares):
+        for yi in range(n_squares):
+            if (xi + yi) % 2 == 0:
+                x_lo = -1.0 + xi * square_size
+                y_lo = -1.0 + yi * square_size
+                ax.add_patch(
+                    plt.Rectangle(
+                        (x_lo, y_lo), square_size, square_size,
+                        facecolor="0.85", edgecolor="none", zorder=0,
+                    )
+                )
+
+    # each particle's full path
+    for i in range(n_plot):
+        ax.plot(
+            traj[:, i, 0], traj[:, i, 1],
+            color="steelblue", alpha=0.6, lw=1.3, zorder=1,
+            marker=".", markersize=3,
+        )
+
+    ax.scatter(x0s[:, 0], x0s[:, 1], c="royalblue", s=140, edgecolors="k",
+               linewidths=0.8, label="source", zorder=4)
+    ax.scatter(pushforward[:, 0], pushforward[:, 1], c="orange", marker="X", s=140,
+               edgecolors="k", linewidths=0.8, label="push-forward", zorder=4)
+
+    ax.set_title(r"Particle trajectories", fontsize=fontsize + 2)
+    ax.legend(loc="upper left", fontsize=fontsize - 2, framealpha=0.9)
+
+    wandb.log({"pushforward_paths": wandb.Image(fig)})
+    return prng_key
+
+
+def make_trajectory_diagnostics_plot(
+    cfg: config_dict.ConfigDict,
+    statics: state_utils.StaticArgs,
+    train_state: state_utils.EMATrainState,
+    prng_key: jnp.ndarray,
+    n_traj: int = 200,
+    n_steps: int = 25,
+) -> jnp.ndarray:
+    """Plot trajectory straightness (arc length / chord length histogram)
+    and curvature along trajectories, for this checkpoint only (no
+    cross-run comparison -- one figure per logged step).
+    """
+    params_for_visual = get_params_for_sampling(cfg, train_state, param_type="visual")
+
+    x0s = statics.sample_rho0(n_traj, prng_key)
+    prng_key = jax.random.split(prng_key)[0]
+
+    traj = compute_trajectories(train_state, params_for_visual, x0s, n_steps)
+    # flatten all non-(time, batch) dims so norms below reduce over the full
+    # per-sample state (whole image, not just its last axis)
+    n_steps_p1, n_traj_actual = traj.shape[0], traj.shape[1]
+    traj_flat = traj.reshape(n_steps_p1, n_traj_actual, -1)
+
+    # straightness: arc length / chord length per particle
+    diffs = np.diff(traj_flat, axis=0)  # (n_steps, n_traj, flattened_d)
+    seg_lengths = np.linalg.norm(diffs, axis=-1)  # (n_steps, n_traj)
+    arc_length = seg_lengths.sum(axis=0)
+    chord_length = np.linalg.norm(traj_flat[-1] - traj_flat[0], axis=-1)
+    straightness_ratio = arc_length / np.clip(chord_length, 1e-8, None)
+
+    # curvature: discrete second derivative (acceleration) along the path
+    dt = 1.0 / n_steps
+    velocity = diffs / dt
+    accel = np.diff(velocity, axis=0) / dt  # (n_steps - 1, n_traj, flattened_d)
+    accel_norm = np.linalg.norm(accel, axis=-1)
+    mean_curvature = accel_norm.mean(axis=1)  # (n_steps - 1,)
+    t_grid = np.linspace(0, 1, n_steps + 1)[1:-1]
+
+    plt.close("all")
+    sns.set_palette("deep")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5), constrained_layout=True)
+
+    ax1.hist(
+        straightness_ratio, bins=30, density=True, alpha=0.7,
+        label=f"mean {straightness_ratio.mean():.4f}",
+    )
+    ax1.set_title("Trajectory straightness", fontsize=13)
+    ax1.set_xlabel("arc length / chord length  (1 = straight)", fontsize=11)
+    ax1.set_ylabel("density", fontsize=11)
+    ax1.legend(fontsize=10)
+
+    ax2.plot(t_grid, mean_curvature, lw=2, color="C1")
+    ax2.set_title("Curvature along trajectories", fontsize=13)
+    ax2.set_xlabel("t", fontsize=11)
+    ax2.set_ylabel(r"mean $\|\ddot{\gamma}(t)\|$", fontsize=11)
+
+    wandb.log({"trajectory_diagnostics": wandb.Image(fig)})
     return prng_key
 
 

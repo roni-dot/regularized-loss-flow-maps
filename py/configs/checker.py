@@ -85,13 +85,13 @@ def get_config(
     config.logging.plot_bs = 25_000
     config.logging.visual_freq = 5_000
     config.logging.save_freq = 10_000  # Save every 10k steps
-    config.logging.wandb_project = "self-distill-flow-maps"
+    config.logging.wandb_project = "self-distill-flow-maps-reproduce-baseline"
 
     # Create systematic name for the experiment
     method_str = f"{loss_type}_{psd_type}" if psd_type else loss_type
 
     config.logging.wandb_name = f"checker_paper_{method_str}"
-    config.logging.wandb_entity = os.getenv("WANDB_ENTITY", "your-username")
+    config.logging.wandb_entity = "flow-map-monge-gap"
     config.logging.output_folder = output_folder
     config.logging.output_name = config.logging.wandb_name
 
