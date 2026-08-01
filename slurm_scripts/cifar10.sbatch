@@ -1,25 +1,29 @@
 #!/bin/bash
-#SBATCH --job-name=loss_method_comp
-#SBATCH --account=kempner_albergo_lab
-#SBATCH --partition=kempner_h100
+#SBATCH --job-name cifar10_baseline
+#SBATCH --time 14-00:00:00
+#SBATCH --output cifar10_baseline-%A_%a.out
+#SBATCH --error=cifar10_baseline-%A_%a.err
+#SBATCH --mail-user=ronimaor@post.bgu.ac.il
+#SBATCH --mail-type=BEGIN,END,FAIL
+# the site wrapper overrides --partition, so request the GPU type instead
+#SBATCH --gpus=rtx_pro_6000:4
+#SBATCH --qos=normal
+#SBATCH --array=0-3 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
-#SBATCH --time=01-00:00
-#SBATCH --gres=gpu:4  # 4 H100s for training
-#SBATCH --mem=64GB
-#SBATCH --output=/n/holylabs/LABS/albergo_lab/Everyone/nmboffi/lmm/cifar10/logs/loss_method_%A_%a.out
-#SBATCH --error=/n/holylabs/LABS/albergo_lab/Everyone/nmboffi/lmm/cifar10/logs/loss_method_%A_%a.err
-#SBATCH --array=0-3  # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=128GB
 
 ## Create output directories if they don't exist
-mkdir -p /n/holylabs/LABS/albergo_lab/Everyone/nmboffi/lmm/cifar10/logs
+mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/logs
+mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/outputs
 
 ## Configuration
-PY_DIR=/n/home04/nboffi/flow-maps/py
+PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.cifar10"
-DATASET_LOCATION="/n/holylabs/LABS/albergo_lab/Everyone/nmboffi/datasets"
-OUTPUT_FOLDER="/n/holylabs/LABS/albergo_lab/Everyone/nmboffi/lmm/cifar10"
+DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
+OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/outputs"
+PROJECT_NAME="self-distill-flow-maps-cifar10-baseline"
 
 # Map array task ID to experiment
 SLURM_ID=${SLURM_ARRAY_TASK_ID}
@@ -58,16 +62,13 @@ echo "Stopgrad Type: ${STOPGRAD}"
 echo "Sampling: ${SAMPLING}"
 echo "Diagonal Fraction: 0.75 (75%)"
 echo "Config: ${CONFIG_PATH}"
+nvidia-smi --query-gpu=name,memory.total --format=csv
 echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
 
-# Load modules
-module purge
-module load gcc/12.2.0-fasrc01
-
-# Hook conda/mamba into the shell and activate env
+# Hook conda into the shell and activate env
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate jax_3_17_25
+conda activate flow_maps
 
 # Fix library path to prioritize conda environment libraries over system ones
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
@@ -76,7 +77,6 @@ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 cd $PY_DIR || exit
 
 echo "Starting training..."
-echo "Time limit: 24 hours"
 echo "Configuration: ${CONFIG_PATH}"
 echo "Output folder: ${OUTPUT_FOLDER}"
 
@@ -85,12 +85,13 @@ python launchers/learn.py \
     --cfg_path "${CONFIG_PATH}" \
     --slurm_id ${SLURM_ID} \
     --dataset_location "${DATASET_LOCATION}" \
-    --output_folder "${OUTPUT_FOLDER}"
+    --output_folder "${OUTPUT_FOLDER}" \
+    --wandb_project_override "${PROJECT_NAME}"
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"
 echo "  Output folder: ${OUTPUT_FOLDER}"
-echo "  WandB project: fmm2"
+echo "  WandB project: ${PROJECT_NAME}"
 echo "=========================================="
 
 exit

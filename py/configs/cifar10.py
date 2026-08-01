@@ -43,6 +43,14 @@ def get_config(
     config.training.ema_facs = [0.999, 0.9999]
     config.training.ndevices = jax.device_count()
 
+    # monge gap config
+    config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
+    config.training.mg_batch_size = 512  # Batch size for Monge gap computation
+    config.training.lambda_reg = 0.0
+    config.training.sinkhorn_max_iter = 200
+    config.training.sinkhorn_relative_epsilon = "mean"
+    config.training.sinkhorn_eps = 0.5
+
     # problem config
     config.problem = ml_collections.ConfigDict()
     config.problem.n = 60000
@@ -79,7 +87,7 @@ def get_config(
     method_str = f"{loss_type}_{psd_type}" if psd_type else loss_type
 
     config.logging.wandb_name = f"cifar10_paper_{method_str}"
-    config.logging.wandb_entity = os.getenv("WANDB_ENTITY", "your-username")
+    config.logging.wandb_entity = "flow-map-monge-gap"
     config.logging.output_folder = output_folder
     config.logging.output_name = config.logging.wandb_name
 
