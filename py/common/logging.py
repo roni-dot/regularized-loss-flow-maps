@@ -331,6 +331,10 @@ def log_metrics(
             metrics["base_loss"] = float(dist_utils.safe_index(cfg, aux["base_loss"]))
         if "monge_gap" in aux:
             metrics["monge_gap"] = float(dist_utils.safe_index(cfg, aux["monge_gap"]))
+        if "mg_converged" in aux:
+            metrics["mg_converged"] = float(dist_utils.safe_index(cfg, aux["mg_converged"]))
+        if "mg_n_iters" in aux:
+            metrics["mg_n_iters"] = float(dist_utils.safe_index(cfg, aux["mg_n_iters"]))
 
     # Compute FID on-the-fly if enabled and at the right frequency
     if (
@@ -685,7 +689,7 @@ def eval_monge_gap_metrics(
     s_vec, t_vec = _eval_st_grid()
 
     def gap_for_pair(s, t) -> float:
-        gap = monge_gap_reg.compute_monge_gap_reg(
+        gap, _, _ = monge_gap_reg.compute_monge_gap_reg(
             params,
             statics.net,
             statics.interp,
@@ -695,6 +699,7 @@ def eval_monge_gap_metrics(
             jnp.array([t]),
             epsilon=cfg.training.sinkhorn_eps,
             relative_epsilon=cfg.training.sinkhorn_relative_epsilon,
+            max_iterations=cfg.training.sinkhorn_max_iter,
         )
         return float(gap)
 

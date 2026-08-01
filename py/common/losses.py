@@ -440,7 +440,7 @@ def setup_loss(
         # Monge gap regularizer — agnostic to cfg.training.loss_type, so this
         # applies identically whether loss_type is lsd, psd, or esd.
         if cfg.training.lambda_reg > 0.0:
-            mg_val = monge_gap_reg.compute_monge_gap_reg(
+            mg_val, mg_converged, mg_n_iters = monge_gap_reg.compute_monge_gap_reg(
                 params,
                 net,
                 interp,
@@ -455,8 +455,15 @@ def setup_loss(
             total = base_loss + cfg.training.lambda_reg * mg_val
         else:
             mg_val = jnp.array(0.0)
+            mg_converged = jnp.array(1.0)
+            mg_n_iters = jnp.array(0.0)
             total = base_loss
 
-        return total, {"base_loss": base_loss, "monge_gap": mg_val}
+        return total, {
+            "base_loss": base_loss,
+            "monge_gap": mg_val,
+            "mg_converged": mg_converged,
+            "mg_n_iters": mg_n_iters,
+        }
 
     return loss

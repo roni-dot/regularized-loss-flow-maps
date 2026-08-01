@@ -3,6 +3,8 @@ Monge gap regularizer using OTT-JAX's built-in monge_gap_from_samples,
 averaged over K independent (s, t) pairs sharing one base point cloud.
 """
 
+from typing import Literal
+
 import jax
 import jax.numpy as jnp
 from ott.geometry import pointcloud
@@ -21,7 +23,7 @@ def compute_monge_gap_reg(
     s_vec: jnp.ndarray,
     t_vec: jnp.ndarray,
     epsilon: float,
-    relative_epsilon: bool,
+    relative_epsilon: Literal["mean", "std"] = "mean",
     cost_fn=None,
      **sinkhorn_kwargs,
 ) -> jnp.ndarray:
@@ -36,15 +38,19 @@ def compute_monge_gap_reg(
             lambda xi: net.apply(params, s, t, xi, None, train=False)
         )(I_s)
 
-        gap = monge_gap.monge_gap_from_samples(
+        gap, out = monge_gap.monge_gap_from_samples(
             I_s, X_st,
             cost_fn=cost_fn,
             epsilon=epsilon,
             relative_epsilon=relative_epsilon,
-            return_output=False,
+            return_output=True,
             **sinkhorn_kwargs,
         )
-        return gap
+        return gap, out.converged, out.n_iters
     
-    gaps = jax.vmap(single_pair)(s_vec, t_vec)
-    return jnp.mean(gaps)
+    gaps, converged, n_iters = jax.vmap(single_pair)(s_vec, t_vec)
+    return (
+        jnp.mean(gaps),
+        jnp.mean(converged.astype(jnp.float32)),
+        jnp.max(n_iters).astype(jnp.float32),
+    )
