@@ -231,10 +231,26 @@ def get_loss_fn_args(
     # set up the teacher (uses current params for self-distillation)
     teacher_params = train_state.params
 
-    # Monge gap target slice: take first mg_batch_size samples (min(bs, mg_batch_size)) from the dataset batch
+    # Monge gap target slice: take mg_batch_size samples from the dataset batch.
+    # NOTE: this is capped by the training batch size, so mg_batch_size > bs
+    # silently yields fewer points than configured. Assert rather than truncate,
+    # since a smaller batch changes the entropic gap estimate.
+    if cfg.training.lambda_reg > 0.0:
+        assert cfg.training.mg_batch_size <= bs, (
+            f"mg_batch_size ({cfg.training.mg_batch_size}) exceeds optimization.bs "
+            f"({bs}); mg_x1 is sliced from the training batch and cannot be larger."
+        )
     mg_x1 = x1batch[: min(bs, cfg.training.mg_batch_size)]
 
-    # for training flow map
+    # for training flow map.
+    # NOTE: mg_x0/mg_x1 are deliberately NOT in this tuple. replicate_loss_fn_args
+    # shards along the sample axis, which would give each device only
+    # mg_batch_size/ndevices points. The Monge gap is a distribution-level
+    # quantity and its entropic estimator is strongly batch-size dependent, so
+    # averaging ndevices independent small-batch gaps != one full-batch gap.
+    # They are broadcast below instead, so every device computes the identical
+    # gap on the full mg_batch_size and the result stays comparable to the
+    # single-GPU checker runs.
     loss_fn_args = (
         x0batch,
         x1batch,
@@ -244,15 +260,22 @@ def get_loss_fn_args(
         ubatch,
         hbatch,
         dropout_keys,
-        mg_x0,
-        mg_x1,
     )
     loss_fn_args = dist_utils.replicate_loss_fn_args(cfg, loss_fn_args)
-    # NOTE: mg_s_vec, mg_t_vec are (K,) group-level values, not per-sample data.
-    # replicate_batch's reshape assumes a per-sample leading axis, so these are
-    # appended AFTER replicate and only behave correctly for ndevices == 1
-    # (checker experiments).
-    loss_fn_args = (teacher_params, *loss_fn_args, mg_s_vec, mg_t_vec)
+
+    # Group-level (not per-sample) Monge arguments: broadcast a leading device
+    # axis so pmap is satisfied without splitting the data.
+    # mg_s_vec/mg_t_vec are (K,) and would fail outright whenever K < ndevices.
+    ndevices = cfg.training.ndevices
+    if ndevices > 1:
+        mg_x0 = jnp.broadcast_to(mg_x0, (ndevices,) + mg_x0.shape)
+        mg_x1 = jnp.broadcast_to(mg_x1, (ndevices,) + mg_x1.shape)
+        mg_s_vec = jnp.broadcast_to(mg_s_vec, (ndevices,) + mg_s_vec.shape)
+        mg_t_vec = jnp.broadcast_to(mg_t_vec, (ndevices,) + mg_t_vec.shape)
+
+    # order is unchanged from before: mg_x0/mg_x1 were already the last two
+    # entries of the replicated tuple, so losses.py needs no modification.
+    loss_fn_args = (teacher_params, *loss_fn_args, mg_x0, mg_x1, mg_s_vec, mg_t_vec)
 
     return loss_fn_args, prng_key
 
