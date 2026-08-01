@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name cifar10_baseline
-#SBATCH --time 14-00:00:00
+#SBATCH --time 2-00:00:00
 #SBATCH --output cifar10_baseline-%A_%a.out
 #SBATCH --error=cifar10_baseline-%A_%a.err
 #SBATCH --mail-user=ronimaor@post.bgu.ac.il
 #SBATCH --mail-type=BEGIN,END,FAIL
 # the site wrapper overrides --partition, so request the GPU type instead
-#SBATCH --gpus=rtx_pro_6000:4
+#SBATCH --gpus=rtx_pro_6000:1
 #SBATCH --qos=normal
-#SBATCH --array=0-3 
+#SBATCH --array=0 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -81,7 +81,7 @@ echo "Configuration: ${CONFIG_PATH}"
 echo "Output folder: ${OUTPUT_FOLDER}"
 
 # Run training with the specific configuration
-python launchers/learn.py \
+python -u launchers/learn.py \
     --cfg_path "${CONFIG_PATH}" \
     --slurm_id ${SLURM_ID} \
     --dataset_location "${DATASET_LOCATION}" \
