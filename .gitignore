@@ -4,3 +4,5 @@
 /outputs
 /.vscode
 */wandb
+datasets/
+*.pickle
