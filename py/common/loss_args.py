@@ -10,6 +10,7 @@ from typing import Callable, Tuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from ml_collections import config_dict
 
 from . import state_utils
@@ -268,10 +269,18 @@ def get_loss_fn_args(
     # mg_s_vec/mg_t_vec are (K,) and would fail outright whenever K < ndevices.
     ndevices = cfg.training.ndevices
     if ndevices > 1:
-        mg_x0 = jnp.broadcast_to(mg_x0, (ndevices,) + mg_x0.shape)
-        mg_x1 = jnp.broadcast_to(mg_x1, (ndevices,) + mg_x1.shape)
-        mg_s_vec = jnp.broadcast_to(mg_s_vec, (ndevices,) + mg_s_vec.shape)
-        mg_t_vec = jnp.broadcast_to(mg_t_vec, (ndevices,) + mg_t_vec.shape)
+        # np.asarray forces a host round-trip first: mg_x0/mg_x1/mg_s_vec/
+        # mg_t_vec come out of the jax.jit-decorated randomness function
+        # above already committed to a single device, and broadcasting a
+        # single-device-committed JAX array straight into a pmap argument
+        # (rather than a plain host array) causes pmap to misread it as
+        # already device-split -- producing wrong-but-finite collective
+        # results downstream (see dist_utils.replicate_batch for the same
+        # fix and a fuller explanation).
+        mg_x0 = np.broadcast_to(np.asarray(mg_x0), (ndevices,) + mg_x0.shape)
+        mg_x1 = np.broadcast_to(np.asarray(mg_x1), (ndevices,) + mg_x1.shape)
+        mg_s_vec = np.broadcast_to(np.asarray(mg_s_vec), (ndevices,) + mg_s_vec.shape)
+        mg_t_vec = np.broadcast_to(np.asarray(mg_t_vec), (ndevices,) + mg_t_vec.shape)
 
     # order is unchanged from before: mg_x0/mg_x1 were already the last two
     # entries of the replicated tuple, so losses.py needs no modification.

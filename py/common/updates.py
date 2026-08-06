@@ -67,7 +67,11 @@ def setup_ema_update(
 ) -> Callable:
     """Setup the function for updating the EMA parameters on single or multiple devices."""
 
-    decorator = jax.jit if cfg.training.ndevices == 1 else jax.pmap
+    decorator = (
+        jax.jit
+        if cfg.training.ndevices == 1
+        else functools.partial(jax.pmap, axis_name="data")
+    )
 
     @decorator
     def update_ema_params(

@@ -179,7 +179,13 @@ def compute_fid_on_the_fly(
         x0_full = statics.sample_rho0(padded_batch_size, sample_key)
 
         if cfg.training.ndevices > 1:
-            x0_batched = x0_full.reshape(
+            # np.asarray forces a host round-trip first: x0_full comes out of
+            # a jax.jit-decorated sample_rho0 already committed to a single
+            # device, and reshaping+passing that straight into a pmap
+            # argument (rather than a plain host array) causes pmap to
+            # misread it as already device-split -- see
+            # dist_utils.replicate_batch for the fuller explanation.
+            x0_batched = np.asarray(x0_full).reshape(
                 cfg.training.ndevices, current_per_device_batch, *cfg.problem.image_dims
             )
         else:
@@ -188,12 +194,12 @@ def compute_fid_on_the_fly(
         # Handle labels for conditional generation
         if cfg.training.conditional:
             if cfg.training.class_dropout > 0:
-                labels = jnp.array(
-                    np.random.choice(cfg.problem.num_classes + 1, padded_batch_size)
+                labels = np.random.choice(
+                    cfg.problem.num_classes + 1, padded_batch_size
                 ).reshape(cfg.training.ndevices, current_per_device_batch)
             else:
-                labels = jnp.array(
-                    np.random.choice(cfg.problem.num_classes, padded_batch_size)
+                labels = np.random.choice(
+                    cfg.problem.num_classes, padded_batch_size
                 ).reshape(cfg.training.ndevices, current_per_device_batch)
         else:
             labels = None
