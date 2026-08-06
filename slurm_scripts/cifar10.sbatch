@@ -1,22 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name cifar10_baseline
-#SBATCH --time 2-00:00:00
-#SBATCH --output cifar10_baseline-%A_%a.out
-#SBATCH --error=cifar10_baseline-%A_%a.err
-#SBATCH --mail-user=ronimaor@post.bgu.ac.il
-#SBATCH --mail-type=BEGIN,END,FAIL
-# the site wrapper overrides --partition, so request the GPU type instead
-#SBATCH --gpus=rtx_pro_6000:1
-#SBATCH --qos=normal
-#SBATCH --array=0 
+#SBATCH --job-name=loss_method_comp
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=128GB
+#SBATCH --time=01-00:00
+#SBATCH --qos=pakman
+#SBATCH --partition=rtx6000
+#SBATCH --gres=gpu:rtx_6000:4
+#SBATCH --mem=64GB
+#SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.out
+#SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.err
+#SBATCH --array=0  # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 
 ## Create output directories if they don't exist
 mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/logs
-mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/outputs
 
 ## Configuration
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
@@ -52,6 +48,8 @@ case ${SLURM_ID} in
         ;;
 esac
 
+
+
 # Print job info
 echo "=========================================="
 echo "Loss Method Comparison Training"
@@ -66,12 +64,12 @@ nvidia-smi --query-gpu=name,memory.total --format=csv
 echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
 
-# Hook conda into the shell and activate env
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate flow_maps
-
-# Fix library path to prioritize conda environment libraries over system ones
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+module purge
+source /storage/modules/packages/anaconda/etc/profile.d/conda.sh
+conda activate flow_maps || { echo "ACTIVATE FAILED"; exit 1; }
+export PYTHONNOUSERSITE=1
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
 
 # Change to project directory
 cd $PY_DIR || exit
