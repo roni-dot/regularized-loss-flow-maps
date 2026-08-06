@@ -32,11 +32,20 @@ def compute_monge_gap_reg(
     batch.
     """
 
+    jax.debug.print(
+        "[monge_gap_reg] mg_x0.shape={} mg_x1.shape={} s_vec.shape={} t_vec.shape={}",
+        mg_x0.shape, mg_x1.shape, s_vec.shape, t_vec.shape,
+    )
+
     def single_pair(s, t):
         I_s = jax.vmap(lambda x0i, x1i: interp.calc_It(s, x0i, x1i))(mg_x0, mg_x1)
         X_st = jax.vmap(
             lambda xi: net.apply(params, s, t, xi, None, train=False)
         )(I_s)
+
+        jax.debug.print(
+            "[monge_gap_reg] I_s.shape={} X_st.shape={}", I_s.shape, X_st.shape
+        )
 
         gap, out = monge_gap.monge_gap_from_samples(
             I_s, X_st,
