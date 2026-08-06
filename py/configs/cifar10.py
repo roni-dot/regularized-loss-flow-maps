@@ -79,7 +79,7 @@ def get_config(
     method_str = f"{loss_type}_{psd_type}" if psd_type else loss_type
 
     config.logging.wandb_name = f"cifar10_paper_{method_str}"
-    config.logging.wandb_entity = os.getenv("WANDB_ENTITY", "your-username")
+    config.logging.wandb_entity = "flow-map-monge-gap"
     config.logging.output_folder = output_folder
     config.logging.output_name = config.logging.wandb_name
 
@@ -105,7 +105,7 @@ def get_config(
     config.network.use_cfg = False
     config.network.reset_optimizer = True
     config.network.logvar_channels = 128
-    config.network.use_bfloat16 = False
+    config.network.use_bfloat16 = True
     config.network.use_weight = True
     config.network.rescale = 0.5
     config.network.unet_kwargs = {
