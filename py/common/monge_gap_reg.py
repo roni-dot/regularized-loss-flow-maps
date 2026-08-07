@@ -54,11 +54,17 @@ def compute_monge_gap_reg(
             return_output=True,
             **sinkhorn_kwargs,
         )
-        return gap, out.converged, out.n_iters
-    
-    gaps, converged, n_iters = jax.vmap(single_pair)(s_vec, t_vec)
+        if cost_fn is None:
+            mean_cost = jnp.mean(((I_s_flat - X_st_flat) ** 2).sum(-1))
+        else:
+            mean_cost = jnp.mean(jax.vmap(cost_fn)(I_s_flat, X_st_flat))
+        return gap, out.reg_ot_cost, mean_cost, out.converged, out.n_iters
+
+    gaps, reg_ot_costs, mean_costs, converged, n_iters = jax.vmap(single_pair)(s_vec, t_vec)
     return (
         jnp.mean(gaps),
+        jnp.mean(reg_ot_costs),
+        jnp.mean(mean_costs),
         jnp.mean(converged.astype(jnp.float32)),
         jnp.max(n_iters).astype(jnp.float32),
     )
