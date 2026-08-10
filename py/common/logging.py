@@ -337,8 +337,8 @@ def log_metrics(
             metrics["base_loss"] = float(dist_utils.safe_index(cfg, aux["base_loss"]))
         if "monge_gap" in aux:
             metrics["monge_gap"] = float(dist_utils.safe_index(cfg, aux["monge_gap"]))
-        if "mg_reg_ot_cost" in aux:
-            metrics["mg_reg_ot_cost"] = float(dist_utils.safe_index(cfg, aux["mg_reg_ot_cost"]))
+        if "mg_div" in aux:
+            metrics["mg_div"] = float(dist_utils.safe_index(cfg, aux["mg_div"]))
         if "mg_mean_cost" in aux:
             metrics["mg_mean_cost"] = float(dist_utils.safe_index(cfg, aux["mg_mean_cost"]))
         if "mg_converged" in aux:

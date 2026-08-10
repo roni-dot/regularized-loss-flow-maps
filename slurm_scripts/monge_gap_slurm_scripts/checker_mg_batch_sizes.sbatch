@@ -8,7 +8,7 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --qos=pakman
-#SBATCH --array=0-15   # 4 losses x 4 mg_batch values
+#SBATCH --array=0-3   # 4 losses x 4 mg_batch values
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
@@ -18,13 +18,13 @@
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.checker"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_ms_bs_sweep"
-PROJECT_NAME="self-distill-flow-maps-mg-batch-sweep"
+PROJECT_NAME="self-distill-flow-maps-mg-batch-sweep-new"
 
 mkdir -p "${OUTPUT_FOLDER}"
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
-LOSS_SLURM_ID=$(( TASK_ID / 4 ))
-MG_BATCH_IDX=$(( TASK_ID % 4 ))
+LOSS_SLURM_ID=${TASK_ID}
+MG_BATCH=128
 
 case ${LOSS_SLURM_ID} in
     0)
@@ -49,14 +49,9 @@ case ${LOSS_SLURM_ID} in
         ;;
 esac
 
-case ${MG_BATCH_IDX} in
-    0) MG_BATCH=128  ;;
-    1) MG_BATCH=512  ;;
-    2) MG_BATCH=1024 ;;
-    3) MG_BATCH=2048 ;;
-esac
 
-LAMBDA_REG=0.1
+SINKHORN_EPS=0.01 ; EPS_TAG=0p01_FIXED
+LAMBDA_REG=0.1 ; LAMBDA_TAG=0p1
 EXP_NAME="${METHOD// /_}_mgbatch${MG_BATCH}"
 
 echo "=========================================="
@@ -99,9 +94,10 @@ python launchers/learn.py \
     --dataset_location "" \
     --output_folder "${OUTPUT_FOLDER}" \
     --lambda_reg_override ${LAMBDA_REG} \
+    --sinkhorn_eps_override ${SINKHORN_EPS} \
     --mg_batch_override ${MG_BATCH} \
     --wandb_project_override "${PROJECT_NAME}" \
-    --wandb_name_additional "${MG_BATCH}_mg_batch_size"
+    --wandb_name_additional "lam${LAMBDA_TAG}_eps${EPS_TAG}_mgb${MG_BATCH}_2000iters"
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"

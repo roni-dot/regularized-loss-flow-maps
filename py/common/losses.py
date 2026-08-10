@@ -442,7 +442,7 @@ def setup_loss(
         if cfg.training.lambda_reg > 0.0:
             (
                 mg_val,
-                mg_reg_ot_cost,
+                mg_div,
                 mg_mean_cost,
                 mg_converged,
                 mg_n_iters,
@@ -461,7 +461,7 @@ def setup_loss(
             total = base_loss + cfg.training.lambda_reg * mg_val
         else:
             mg_val = jnp.array(0.0)
-            mg_reg_ot_cost = jnp.array(0.0)
+            mg_div = jnp.array(0.0)
             mg_mean_cost = jnp.array(0.0)
             mg_converged = jnp.array(1.0)
             mg_n_iters = jnp.array(0.0)
@@ -470,7 +470,7 @@ def setup_loss(
         return total, {
             "base_loss": base_loss,
             "monge_gap": mg_val,
-            "mg_reg_ot_cost": mg_reg_ot_cost,
+            "mg_div": mg_div,
             "mg_mean_cost": mg_mean_cost,
             "mg_converged": mg_converged,
             "mg_n_iters": mg_n_iters,

@@ -8,8 +8,9 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 from ott.geometry import pointcloud
-from ott.neural.methods import monge_gap
+from ott.tools import sinkhorn_divergence as sd
 from flax import linen as nn
+from ott.geometry import costs
 
 from . import interpolant as interpolant
 
@@ -31,8 +32,10 @@ def compute_monge_gap_reg(
     K independent (s, t) pairs, each applied to the SAME (mg_x0, mg_x1) base
     batch.
     """
-
+    cost_fn = costs.SqEuclidean() if cost_fn is None else cost_fn
+    
     def single_pair(s, t):
+
         I_s = jax.vmap(lambda x0i, x1i: interp.calc_It(s, x0i, x1i))(mg_x0, mg_x1)
         X_st = jax.vmap(
             lambda xi: net.apply(params, s, t, xi, None, train=False)
@@ -46,25 +49,28 @@ def compute_monge_gap_reg(
         I_s_flat = I_s.reshape(n_points, -1)
         X_st_flat = X_st.reshape(n_points, -1)
 
-        gap, out = monge_gap.monge_gap_from_samples(
+        geom_check = pointcloud.PointCloud(I_s_flat, X_st_flat, cost_fn=cost_fn,
+                                   epsilon=epsilon, relative_epsilon=relative_epsilon)
+
+        div, out = sd.sinkdiv(
             I_s_flat, X_st_flat,
             cost_fn=cost_fn,
             epsilon=epsilon,
             relative_epsilon=relative_epsilon,
-            return_output=True,
-            **sinkhorn_kwargs,
+            solve_kwargs=sinkhorn_kwargs,
         )
-        if cost_fn is None:
-            mean_cost = jnp.mean(((I_s_flat - X_st_flat) ** 2).sum(-1))
-        else:
-            mean_cost = jnp.mean(jax.vmap(cost_fn)(I_s_flat, X_st_flat))
-        return gap, out.reg_ot_cost, mean_cost, out.converged, out.n_iters
+        
+        mean_cost = jnp.mean(jax.vmap(cost_fn)(I_s_flat, X_st_flat))
+        gap = mean_cost - div
+        conv = jnp.min(jnp.array(out.converged).astype(jnp.float32))
+        iters = jnp.max(jnp.array(out.n_iters)).astype(jnp.float32)
+        return gap, div, mean_cost, conv, iters
 
-    gaps, reg_ot_costs, mean_costs, converged, n_iters = jax.vmap(single_pair)(s_vec, t_vec)
+    gaps, divs, mean_costs, converged, n_iters = jax.vmap(single_pair)(s_vec, t_vec)
     return (
         jnp.mean(gaps),
-        jnp.mean(reg_ot_costs),
+        jnp.mean(divs),
         jnp.mean(mean_costs),
-        jnp.mean(converged.astype(jnp.float32)),
-        jnp.max(n_iters).astype(jnp.float32),
+        jnp.mean(converged),
+        jnp.max(n_iters),
     )

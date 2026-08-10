@@ -5,14 +5,13 @@
 #SBATCH --error=cifar10_monge_sweep_eps-%A_%a.err
 #SBATCH --mail-user=ronimaor@post.bgu.ac.il
 #SBATCH --mail-type=BEGIN,END,FAIL
-# the site wrapper overrides --partition, so request the GPU type instead
-#SBATCH --gpus=rtx_pro_6000:1
-#SBATCH --qos=normal
+#SBATCH --qos=pakman
+#SBATCH --partition=rtx6000
+#SBATCH --gres=gpu:rtx_6000:4
 #SBATCH --array=0
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=128GB
+#SBATCH --mem=64GB
 
 ## Create output directories if they don't exist
 mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_monge_sweep_eps/logs
@@ -60,10 +59,10 @@ STOPGRAD="convex"
 # Monge gap hyperparameters
 LAMBDA_REG=0.1 ; LAMBDA_TAG=0p1
 MONGE_NUM_PAIRS=1
-MG_BATCH=512
+MG_BATCH=64
 
 case ${SINKHORN_EPS_IDX} in
-    0) SINKHORN_EPS=0.01; EPS_TAG=0p01 ;;
+    0) SINKHORN_EPS=0.1; EPS_TAG=0p1_FIXED ;;
 esac
 
 # Print job info
