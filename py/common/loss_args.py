@@ -15,6 +15,7 @@ from ml_collections import config_dict
 
 from . import state_utils
 from . import dist_utils
+from . import ot_coupling as ot_coupling_mod
 
 
 def safe_resize(curr_bs: int, bs: int, x: jnp.ndarray) -> jnp.ndarray:
@@ -138,12 +139,21 @@ def get_loss_fn_args_randomness(
     )
     prng_key = jax.random.split(dropout_keys[0])[0]
 
-    # Sample K independent (s, t) pairs for the Monge gap.
-    # plus its own base point cloud shared across all K pairs.
-    mg_s_vec, mg_t_vec = _sample_mg_pairs(
-        mg_key, cfg.training.monge_num_pairs, tmin, tmax
-    )
-    mg_x0 = sample_rho0(cfg.training.mg_batch_size, mg_x0key)
+    # Sample K independent (s, t) pairs for the Monge gap, plus its own base
+    # point cloud shared across all K pairs. lambda_reg is static (cfg is a
+    # static jit arg), so when the regularizer is disabled this whole block
+    # is never traced -- mg_x0's base-distribution sample is the expensive
+    # part, but mg_s_vec/mg_t_vec are gated too since they're only ever
+    # meaningful alongside mg_x0/mg_x1. Length-1 dummies stand in instead.
+    if cfg.training.lambda_reg > 0.0:
+        mg_x0 = sample_rho0(cfg.training.mg_batch_size, mg_x0key)
+        mg_s_vec, mg_t_vec = _sample_mg_pairs(
+            mg_key, cfg.training.monge_num_pairs, tmin, tmax
+        )
+    else:
+        mg_x0 = jnp.zeros((1,) + x0batch.shape[1:], dtype=x0batch.dtype)
+        mg_s_vec = jnp.zeros((1,))
+        mg_t_vec = jnp.zeros((1,))
 
     return (
         tbatch,
@@ -229,6 +239,35 @@ def get_loss_fn_args(
     # grab next batch of samples and labels
     x1batch, label_batch, prng_key = get_batch(cfg, statics, prng_key)
 
+    # Optional minibatch exact OT coupling (OT-CFM): reorder x1 to pair with
+    # x0 via per-shard, per-chunk exact optimal transport instead of the
+    # independent pairing from the data loader. Must run here, outside
+    # jit/pmap and before replication -- scipy's linear_sum_assignment is
+    # not jittable. Recomputed fresh every step; default is None, which
+    # leaves the existing independent-pairing behavior unchanged.
+    # Diagnostics are returned rather than logged here: a bare wandb.log
+    # call would advance the global step counter on its own, so metrics
+    # logged later in train_loop (via logging.log_metrics) would land on a
+    # different wandb step than this one.
+    ot_metrics = {}
+    if cfg.training.ot_coupling is not None:
+        if cfg.training.ot_coupling != "exact":
+            raise ValueError(f"Unknown training.ot_coupling: {cfg.training.ot_coupling!r}")
+        x1batch, ot_perm, ot_cost_before, ot_cost_after, ot_frac_moved = (
+            ot_coupling_mod.reorder_minibatch_ot(
+                x0batch, x1batch, cfg.training.ndevices, cfg.training.ot_chunk_size
+            )
+        )
+        # keep any per-sample array paired with x1 (e.g. class labels)
+        # consistent with the reordered x1
+        if label_batch is not None:
+            label_batch = np.asarray(label_batch)[ot_perm]
+        ot_metrics = {
+            "ot_coupling/mean_cost_before": ot_cost_before,
+            "ot_coupling/mean_cost_after": ot_cost_after,
+            "ot_coupling/frac_moved": ot_frac_moved,
+        }
+
     # set up the teacher (uses current params for self-distillation)
     teacher_params = train_state.params
 
@@ -236,12 +275,19 @@ def get_loss_fn_args(
     # NOTE: this is capped by the training batch size, so mg_batch_size > bs
     # silently yields fewer points than configured. Assert rather than truncate,
     # since a smaller batch changes the entropic gap estimate.
+    # Regularizer disabled: skip the slice entirely and hand losses.py a
+    # length-1 dummy instead. It is never read -- losses.py's own
+    # `if cfg.training.lambda_reg > 0.0` guards the only place mg_x1 is
+    # used -- this just avoids slicing/broadcasting/host-transferring an
+    # mg_batch_size-sized array on every step for no reason.
     if cfg.training.lambda_reg > 0.0:
         assert cfg.training.mg_batch_size <= bs, (
             f"mg_batch_size ({cfg.training.mg_batch_size}) exceeds optimization.bs "
             f"({bs}); mg_x1 is sliced from the training batch and cannot be larger."
         )
-    mg_x1 = x1batch[: min(bs, cfg.training.mg_batch_size)]
+        mg_x1 = x1batch[: min(bs, cfg.training.mg_batch_size)]
+    else:
+        mg_x1 = np.zeros((1,) + x1batch.shape[1:], dtype=x1batch.dtype)
 
     # for training flow map.
     # NOTE: mg_x0/mg_x1 are deliberately NOT in this tuple. replicate_loss_fn_args
@@ -286,7 +332,7 @@ def get_loss_fn_args(
     # entries of the replicated tuple, so losses.py needs no modification.
     loss_fn_args = (teacher_params, *loss_fn_args, mg_x0, mg_x1, mg_s_vec, mg_t_vec)
 
-    return loss_fn_args, prng_key
+    return loss_fn_args, prng_key, ot_metrics
 
 def _sample_mg_pairs(
     key: jnp.ndarray, K: int, tmin: float, tmax: float

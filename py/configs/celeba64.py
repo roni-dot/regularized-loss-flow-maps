@@ -40,6 +40,11 @@ def get_config(
     config.training.ema_facs = [0.999, 0.9999]
     config.training.ndevices = jax.device_count()
 
+    # minibatch optimal transport coupling (OT-CFM); None leaves the
+    # existing independent x0/x1 pairing unchanged
+    config.training.ot_coupling = None
+    config.training.ot_chunk_size = 256
+
     # problem config
     config.problem = ml_collections.ConfigDict()
     config.problem.n = 202_599  # CelebA dataset size
