@@ -6,7 +6,7 @@
 #SBATCH --error=checker_ot-%A_%a.err
 #SBATCH --mail-user=ronimaor@post.bgu.ac.il
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --gres=gpu:rtx_6000:1
+#SBATCH --gres=gpu:rtx_6000:4
 #SBATCH --qos=pakman
 #SBATCH --array=0-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 #SBATCH --nodes=1
@@ -19,6 +19,7 @@ PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.checker"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_ot"
 PROJECT_NAME="self-distill-flow-maps-minibatch-ot"
+OT_METHOD="sinkhorn"
 OT_CHUNK_SIZE=256
 
 mkdir -p "${OUTPUT_FOLDER}"
@@ -60,8 +61,11 @@ echo "Diagonal Fraction: 0.75 (75%)"
 echo "Batch Size: 100,000"
 echo "Total Steps: 100,000"
 echo "lambda_reg: 0.0 (Monge gap disabled, true no-op)"
-echo "ot_coupling: exact (minibatch OT-CFM)"
+echo "ot_coupling: ${OT_METHOD} (minibatch OT-CFM / SB-CFM)"
 echo "ot_chunk_size: ${OT_CHUNK_SIZE}"
+echo "GPUs: 4x RTX 6000 (jax.device_count() picks all of them up for training;"
+echo "  the Sinkhorn block loop itself still runs one block at a time, on"
+echo "  whichever device jax defaults to -- it is not pmap'd across GPUs)"
 echo "Config: ${CONFIG_PATH}"
 echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
@@ -80,7 +84,7 @@ echo "Configuration: ${CONFIG_PATH}"
 echo "Output folder: ${OUTPUT_FOLDER}"
 echo "Dataset: Checker (2D, 10M samples)"
 echo "Network: 4-layer MLP with 512 neurons"
-echo "GPU: Single RTX 6000"
+echo "GPU: 4x RTX 6000"
 
 python launchers/learn.py \
     --cfg_path "${CONFIG_PATH}" \
@@ -88,10 +92,10 @@ python launchers/learn.py \
     --dataset_location "" \
     --output_folder "${OUTPUT_FOLDER}" \
     --lambda_reg_override 0.0 \
-    --ot_coupling_override exact \
+    --ot_coupling_override "${OT_METHOD}" \
     --ot_chunk_size_override ${OT_CHUNK_SIZE} \
     --wandb_project_override "${PROJECT_NAME}" \
-    --wandb_name_additional "ot_chunk${OT_CHUNK_SIZE}" \
+    --wandb_name_additional "ot_${OT_METHOD}_chunk${OT_CHUNK_SIZE}" \
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"

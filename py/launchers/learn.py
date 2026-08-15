@@ -131,7 +131,7 @@ def parse_command_line_arguments():
         "--ot_coupling_override",
         type=str,
         default=None,
-        choices=["none", "exact"],
+        choices=["none", "exact", "sinkhorn"],
         help="Override config.training.ot_coupling ('none' disables it)",
     )
     parser.add_argument(
@@ -139,6 +139,13 @@ def parse_command_line_arguments():
         type=int,
         default=None,
         help="Override config.training.ot_chunk_size",
+    )
+    parser.add_argument(
+        "--ot_n_jobs_override",
+        type=int,
+        default=None,
+        help="Override config.training.ot_n_jobs (worker processes for "
+        "ot_coupling='exact'; ignored for 'sinkhorn')",
     )
     parser.add_argument(
             "--wandb_project_override",
@@ -177,6 +184,8 @@ def setup_config_dict():
         )
     if args.ot_chunk_size_override is not None:
         cfg.training.ot_chunk_size = args.ot_chunk_size_override
+    if args.ot_n_jobs_override is not None:
+        cfg.training.ot_n_jobs = args.ot_n_jobs_override
     if args.wandb_project_override is not None:
         cfg.logging.wandb_project = args.wandb_project_override
     if args.wandb_name_additional is not None:

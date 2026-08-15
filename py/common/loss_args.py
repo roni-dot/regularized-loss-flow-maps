@@ -239,29 +239,42 @@ def get_loss_fn_args(
     # grab next batch of samples and labels
     x1batch, label_batch, prng_key = get_batch(cfg, statics, prng_key)
 
-    # Optional minibatch exact OT coupling (OT-CFM): reorder x1 to pair with
-    # x0 via per-shard, per-chunk exact optimal transport instead of the
+    # Optional minibatch OT coupling (OT-CFM / SB-CFM): reorder x1 to pair
+    # with x0 via per-shard, per-chunk minibatch OT instead of the
     # independent pairing from the data loader. Must run here, outside
-    # jit/pmap and before replication -- scipy's linear_sum_assignment is
-    # not jittable. Recomputed fresh every step; default is None, which
-    # leaves the existing independent-pairing behavior unchanged.
+    # jit/pmap and before replication -- "exact" uses scipy's
+    # linear_sum_assignment, which is not jittable. Recomputed fresh every
+    # step; default is None, which leaves the existing independent-pairing
+    # behavior unchanged.
     # Diagnostics are returned rather than logged here: a bare wandb.log
     # call would advance the global step counter on its own, so metrics
     # logged later in train_loop (via logging.log_metrics) would land on a
     # different wandb step than this one.
     ot_metrics = {}
     if cfg.training.ot_coupling is not None:
-        if cfg.training.ot_coupling != "exact":
+        if cfg.training.ot_coupling not in ("exact", "sinkhorn"):
             raise ValueError(f"Unknown training.ot_coupling: {cfg.training.ot_coupling!r}")
-        x1batch, ot_perm, ot_cost_before, ot_cost_after, ot_frac_moved = (
+        ot_key, prng_key = jax.random.split(prng_key)
+        x1batch, ot_idx, ot_cost_before, ot_cost_after, ot_frac_moved = (
             ot_coupling_mod.reorder_minibatch_ot(
-                x0batch, x1batch, cfg.training.ndevices, cfg.training.ot_chunk_size
+                x0batch,
+                x1batch,
+                cfg.training.ndevices,
+                cfg.training.ot_chunk_size,
+                method=cfg.training.ot_coupling,
+                n_jobs=getattr(cfg.training, "ot_n_jobs", 1),
+                prng_key=ot_key,
+                # reuse the Monge gap regularizer's entropic-OT settings so
+                # the two features share one set of Sinkhorn hyperparameters
+                sinkhorn_epsilon=cfg.training.sinkhorn_eps,
+                sinkhorn_relative_epsilon=cfg.training.sinkhorn_relative_epsilon,
+                sinkhorn_max_iter=cfg.training.sinkhorn_max_iter,
             )
         )
         # keep any per-sample array paired with x1 (e.g. class labels)
         # consistent with the reordered x1
         if label_batch is not None:
-            label_batch = np.asarray(label_batch)[ot_perm]
+            label_batch = np.asarray(label_batch)[ot_idx]
         ot_metrics = {
             "ot_coupling/mean_cost_before": ot_cost_before,
             "ot_coupling/mean_cost_after": ot_cost_after,

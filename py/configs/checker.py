@@ -47,8 +47,9 @@ def get_config(
 
     # minibatch optimal transport coupling (OT-CFM); None leaves the
     # existing independent x0/x1 pairing unchanged
-    config.training.ot_coupling = None
+    config.training.ot_coupling = None  # or "exact" / "sinkhorn"
     config.training.ot_chunk_size = 256
+    config.training.ot_n_jobs = 1  # worker processes for method="exact"
 
     # monge gap config
     config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
