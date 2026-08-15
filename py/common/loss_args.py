@@ -255,7 +255,7 @@ def get_loss_fn_args(
         if cfg.training.ot_coupling not in ("exact", "sinkhorn"):
             raise ValueError(f"Unknown training.ot_coupling: {cfg.training.ot_coupling!r}")
         ot_key, prng_key = jax.random.split(prng_key)
-        x1batch, ot_idx, ot_cost_before, ot_cost_after, ot_frac_moved = (
+        x1batch, ot_idx, ot_cost_before, ot_cost_after, ot_frac_moved, ot_frac_unique = (
             ot_coupling_mod.reorder_minibatch_ot(
                 x0batch,
                 x1batch,
@@ -279,6 +279,7 @@ def get_loss_fn_args(
             "ot_coupling/mean_cost_before": ot_cost_before,
             "ot_coupling/mean_cost_after": ot_cost_after,
             "ot_coupling/frac_moved": ot_frac_moved,
+            "ot_coupling/frac_unique": ot_frac_unique,
         }
 
     # set up the teacher (uses current params for self-distillation)

@@ -257,6 +257,11 @@ def reorder_minibatch_ot(
         mean_cost_before: mean squared distance of the original pairing.
         mean_cost_after: mean squared distance of the OT-reordered pairing.
         frac_moved: fraction of rows whose index changed under the reorder.
+        frac_unique: fraction of distinct x1 rows actually used in the
+            reordered batch. 1.0 for method="exact" (each block's coupling
+            is a bijection); can be < 1.0 for method="sinkhorn", where the
+            entropic coupling can send more than one x0 row to the same
+            x1 row.
     """
     x0 = np.asarray(x0)
     x1 = np.asarray(x1)
@@ -307,5 +312,13 @@ def reorder_minibatch_ot(
     mean_cost_before = cost_before_total / bs
     mean_cost_after = cost_after_total / bs
     frac_moved = n_moved / bs
+    # Blocks never share index ranges (global_idx[a:b] is always shifted
+    # into [a, b)), so a duplicate can only occur within a single block --
+    # counting uniques over the whole batch is exactly equivalent to
+    # summing per-block unique counts. Always 1.0 for method="exact"
+    # (each block's coupling is a bijection); can be < 1.0 for
+    # method="sinkhorn", where the entropic coupling routinely reuses the
+    # same x1 row for more than one x0 row.
+    frac_unique = len(np.unique(global_idx)) / bs
 
-    return x1_out, global_idx, mean_cost_before, mean_cost_after, frac_moved
+    return x1_out, global_idx, mean_cost_before, mean_cost_after, frac_moved, frac_unique
