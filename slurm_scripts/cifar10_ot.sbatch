@@ -12,15 +12,14 @@
 #SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/loss_method_%A_%a.err
 #SBATCH --array=0  # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 
-## Create output directories if they don't exist
-mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/logs
-
 ## Configuration
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.cifar10"
 DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/outputs"
 PROJECT_NAME="self-distill-flow-maps-minibatch-ot"
+
+mkdir -p "${OUTPUT_FOLDER}"
 OT_METHOD="sinkhorn"
 OT_CHUNK_SIZE=128
 
