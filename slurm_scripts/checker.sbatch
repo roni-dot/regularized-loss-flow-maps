@@ -18,7 +18,7 @@
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.checker"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_baseline"
-PROJECT_NAME="self-distill-flow-maps-reproduce-baseline"
+PROJECT_NAME="self-distill-flow-maps-reproduce-baseline-4096-bs"
 
 mkdir -p "${OUTPUT_FOLDER}"
 

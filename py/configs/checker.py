@@ -47,9 +47,8 @@ def get_config(
 
     # minibatch optimal transport coupling (OT-CFM); None leaves the
     # existing independent x0/x1 pairing unchanged
-    config.training.ot_coupling = None  # or "exact" / "sinkhorn"
+    config.training.ot_coupling = None
     config.training.ot_chunk_size = 256
-    config.training.ot_n_jobs = 1  # worker processes for method="exact"
 
     # monge gap config
     config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
@@ -73,7 +72,7 @@ def get_config(
 
     # optimization config - Using latest hyperparameters with checker-appropriate batch size
     config.optimization = ml_collections.ConfigDict()
-    config.optimization.bs = 100_000  # Large batch for efficient 2D training
+    config.optimization.bs = 4096  # Large batch for efficient 2D training
     config.optimization.diag_fraction = (
         0.75  # 75% diagonal fraction (matching latest configs)
     )

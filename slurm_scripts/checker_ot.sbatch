@@ -6,9 +6,9 @@
 #SBATCH --error=checker_ot-%A_%a.err
 #SBATCH --mail-user=ronimaor@post.bgu.ac.il
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --gres=gpu:rtx_6000:4
+#SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --qos=pakman
-#SBATCH --array=0-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
+#SBATCH --array=1-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1

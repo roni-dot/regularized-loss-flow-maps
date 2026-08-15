@@ -2,7 +2,7 @@
 #SBATCH --job-name=cifar10_ot
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=1
 #SBATCH --time=01-00:00
 #SBATCH --qos=pakman
 #SBATCH --partition=rtx6000
@@ -21,9 +21,8 @@ CONFIG_PATH="configs.cifar10"
 DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/outputs"
 PROJECT_NAME="self-distill-flow-maps-minibatch-ot"
-OT_METHOD="exact"
-OT_CHUNK_SIZE=256
-OT_N_JOBS=8  # matches --cpus-per-task above; parallelizes the per-block
+OT_METHOD="sinkhorn"
+OT_CHUNK_SIZE=128
 
 # Hungarian solves for OT_METHOD=exact (ignored for OT_METHOD=sinkhorn)
 
@@ -67,7 +66,6 @@ echo "Sampling: ${SAMPLING}"
 echo "Diagonal Fraction: 0.75 (75%)"
 echo "ot_coupling: ${OT_METHOD} (minibatch OT-CFM)"
 echo "ot_chunk_size: ${OT_CHUNK_SIZE}"
-echo "ot_n_jobs: ${OT_N_JOBS}"
 echo "Config: ${CONFIG_PATH}"
 nvidia-smi --query-gpu=name,memory.total --format=csv
 echo "Output: ${OUTPUT_FOLDER}"
@@ -95,7 +93,6 @@ python -u launchers/learn.py \
     --output_folder "${OUTPUT_FOLDER}" \
     --ot_coupling_override "${OT_METHOD}" \
     --ot_chunk_size_override ${OT_CHUNK_SIZE} \
-    --ot_n_jobs_override ${OT_N_JOBS} \
     --wandb_project_override "${PROJECT_NAME}" \
     --wandb_name_additional "ot_${OT_METHOD}_chunk${OT_CHUNK_SIZE}"
 
