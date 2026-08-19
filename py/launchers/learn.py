@@ -138,7 +138,8 @@ def parse_command_line_arguments():
         "--ot_chunk_size_override",
         type=int,
         default=None,
-        help="Override config.training.ot_chunk_size",
+        help="Override config.training.ot_chunk_size (ot_coupling='exact' only; "
+        "'sinkhorn' always solves the full batch)",
     )
     parser.add_argument(
         "--ot_n_jobs_override",

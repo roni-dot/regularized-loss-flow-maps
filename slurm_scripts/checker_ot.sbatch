@@ -11,7 +11,6 @@
 #SBATCH --array=1-3   # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
 #SBATCH --mem=32GB
 
 ## Configuration

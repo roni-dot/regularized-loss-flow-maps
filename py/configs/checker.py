@@ -72,7 +72,7 @@ def get_config(
 
     # optimization config - Using latest hyperparameters with checker-appropriate batch size
     config.optimization = ml_collections.ConfigDict()
-    config.optimization.bs = 4096  # Large batch for efficient 2D training
+    config.optimization.bs = 100_000  # Large batch for efficient 2D training
     config.optimization.diag_fraction = (
         0.75  # 75% diagonal fraction (matching latest configs)
     )
