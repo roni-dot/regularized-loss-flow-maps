@@ -21,8 +21,6 @@ PROJECT_NAME="self-distill-flow-maps-minibatch-ot-sinkhorn-coupling-repair"
 mkdir -p "${OUTPUT_FOLDER}"
 OT_METHOD="sinkhorn"
 
-# Hungarian solves for OT_METHOD=exact (ignored for OT_METHOD=sinkhorn)
-
 # Map array task ID to experiment
 SLURM_ID=${SLURM_ARRAY_TASK_ID}
 
