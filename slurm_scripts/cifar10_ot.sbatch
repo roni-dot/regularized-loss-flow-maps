@@ -2,25 +2,24 @@
 #SBATCH --job-name=cifar10_ot
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=01-00:00
+#SBATCH --time=04-00:00
 #SBATCH --qos=pakman
 #SBATCH --partition=rtx6000
 #SBATCH --gres=gpu:rtx_6000:4
 #SBATCH --mem=64GB
-#SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/loss_method_%A_%a.out
-#SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/loss_method_%A_%a.err
+#SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/loss_method_%A_%a.out
+#SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/loss_method_%A_%a.err
 #SBATCH --array=0  # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
 
 ## Configuration
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.cifar10"
 DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
-OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot/outputs"
-PROJECT_NAME="self-distill-flow-maps-minibatch-ot"
+OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/outputs"
+PROJECT_NAME="self-distill-flow-maps-minibatch-ot-sinkhorn-coupling-repair"
 
 mkdir -p "${OUTPUT_FOLDER}"
 OT_METHOD="sinkhorn"
-OT_CHUNK_SIZE=128
 
 # Hungarian solves for OT_METHOD=exact (ignored for OT_METHOD=sinkhorn)
 
@@ -55,7 +54,7 @@ esac
 
 # Print job info
 echo "=========================================="
-echo "Minibatch OT-CFM Loss Method Comparison Training"
+echo "Minibatch OT-CFM coupling repair Loss Method Comparison Training"
 echo "SLURM Job ID: ${SLURM_JOB_ID}"
 echo "SLURM Array Task ID: ${SLURM_ARRAY_TASK_ID}"
 echo "Method: ${METHOD}"
@@ -63,7 +62,6 @@ echo "Stopgrad Type: ${STOPGRAD}"
 echo "Sampling: ${SAMPLING}"
 echo "Diagonal Fraction: 0.75 (75%)"
 echo "ot_coupling: ${OT_METHOD} (minibatch OT-CFM)"
-echo "ot_chunk_size: ${OT_CHUNK_SIZE}"
 echo "Config: ${CONFIG_PATH}"
 nvidia-smi --query-gpu=name,memory.total --format=csv
 echo "Output: ${OUTPUT_FOLDER}"
@@ -90,9 +88,8 @@ python -u launchers/learn.py \
     --dataset_location "${DATASET_LOCATION}" \
     --output_folder "${OUTPUT_FOLDER}" \
     --ot_coupling_override "${OT_METHOD}" \
-    --ot_chunk_size_override ${OT_CHUNK_SIZE} \
     --wandb_project_override "${PROJECT_NAME}" \
-    --wandb_name_additional "ot_${OT_METHOD}_chunk${OT_CHUNK_SIZE}"
+    --wandb_name_additional "ot_${OT_METHOD}"
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"
