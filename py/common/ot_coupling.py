@@ -16,11 +16,13 @@ pairing coming out of the data loader. Two methods are supported:
                 same entropic-regularization machinery already used for the
                 Monge gap regularizer (common/monge_gap_reg.py) elsewhere in
                 this codebase. Solved once over the *entire* minibatch (not
-                chunked into per-device/per-block pieces like "exact"),
-                explicitly forced onto the CPU so it never contends with
-                whatever the training step is doing on GPU/TPU. Each x0 row
-                independently samples a partner from its row of the
-                coupling matrix, which on its own routinely sends more than
+                chunked into per-device/per-block pieces like "exact"), as
+                ordinary jitted jax ops on whichever device jax is already
+                placing arrays on (GPU/TPU if available -- running the
+                O(bs^2) solve on CPU was tried and was too slow in
+                practice). Each x0 row independently samples a partner
+                from its row of the coupling matrix, which on its own
+                routinely sends more than
                 one x0 row to the same x1 row (biasing training toward
                 whichever x1 sample got duplicated). A duplicate-repair
                 pass then fixes this: for every x1 row claimed by more than
@@ -39,9 +41,9 @@ It is solved independently within each device's shard, so the result is
 agnostic to how many devices are in play, and never disturbs the row
 ranges that dist_utils.replicate_batch's reshape later treats as
 per-device shards. The "sinkhorn" method instead solves one coupling over
-the whole batch (see above), since its cost is dominated by an O(bs^2)
-pairwise distance matrix rather than a combinatorial assignment, and
-running on CPU keeps that matrix off the accelerator.
+the whole batch (see above): its cost is dominated by an O(bs^2) pairwise
+distance matrix computed as ordinary jax ops, which is cheap to run on
+whatever accelerator is already handling the training step.
 
 Recomputed fresh on every call -- no state is cached across steps (aside
 from the lazily-created worker pool used by the "exact" method's
@@ -159,20 +161,14 @@ def _reorder_minibatch_exact(
 
 # ----------------------------------------------------------------------------
 # "sinkhorn" method: entropic OT via ott-jax, row-sampled into a per-x0
-# partner index. Solved once over the whole batch, pinned to the CPU
-# device so it never competes with the training step for accelerator
-# memory/compute.
+# partner index. Solved once over the whole batch, as ordinary jitted jax
+# ops on whichever device jax is already placing arrays on (GPU/TPU if
+# available) -- running the O(bs^2) solve on CPU was tried and was too
+# slow in practice.
 # ----------------------------------------------------------------------------
 
 
-@functools.lru_cache(maxsize=1)
-def _cpu_device():
-    return jax.devices("cpu")[0]
-
-
-@functools.partial(
-    jax.jit, static_argnames=("relative_epsilon", "max_iterations"), backend="cpu"
-)
+@functools.partial(jax.jit, static_argnames=("relative_epsilon", "max_iterations"))
 def _sinkhorn_reorder_chunk(
     x0_blk: jnp.ndarray,
     x1_blk: jnp.ndarray,
@@ -262,15 +258,14 @@ def _reorder_minibatch_sinkhorn(
     relative_epsilon,
     max_iterations: int,
 ) -> list:
-    """Solve entropic OT once over the whole batch, on the CPU, then repair
-    duplicate assignments (see _repair_duplicate_assignments) so the
-    result is a genuine permutation, like "exact". Returns a single-element
-    list with (idx, cost_before, cost_after, n_moved, converged, n_iters,
+    """Solve entropic OT once over the whole batch, then repair duplicate
+    assignments (see _repair_duplicate_assignments) so the result is a
+    genuine permutation, like "exact". Returns a single-element list with
+    (idx, cost_before, cost_after, n_moved, converged, n_iters,
     frac_repaired) -- kept as a list so callers can treat "exact"
     (multi-block) and "sinkhorn" (single whole-batch block) uniformly."""
-    key = jax.device_put(prng_key, _cpu_device())
     idx, score, converged, n_iters = _sinkhorn_reorder_chunk(
-        x0_flat, x1_flat, key, epsilon, relative_epsilon, max_iterations
+        x0_flat, x1_flat, prng_key, epsilon, relative_epsilon, max_iterations
     )
     idx = np.asarray(idx)
     score = np.asarray(score)
@@ -314,9 +309,9 @@ def reorder_minibatch_ot(
             whole batch as one block regardless of ndevices.
         chunk_size: block size for the per-block OT solve under
             method="exact". Unused for "sinkhorn", which always solves the
-            entire batch in a single block on the CPU.
+            entire batch in a single block.
         method: "exact" (scipy Hungarian algorithm) or "sinkhorn" (entropic
-            OT via ott-jax, solved on CPU over the full batch).
+            OT via ott-jax, solved over the full batch).
         n_jobs: number of worker processes for parallelizing the per-block
             solves under method="exact" (ignored for "sinkhorn"). 1
             (default) runs sequentially in the calling process, with no
@@ -383,8 +378,9 @@ def reorder_minibatch_ot(
         assert prng_key is not None, "prng_key is required for method='sinkhorn'"
         # Whole batch as a single block: unlike "exact", sinkhorn's cost is
         # an O(bs^2) pairwise distance matrix rather than a combinatorial
-        # assignment, and it runs on CPU (see _sinkhorn_reorder_chunk), so
-        # there's no need to shard it per-device/per-chunk.
+        # assignment, and it runs as ordinary jax ops (see
+        # _sinkhorn_reorder_chunk), so there's no need to shard it
+        # per-device/per-chunk.
         ranges = [(0, bs)]
         results = _reorder_minibatch_sinkhorn(
             x0_flat,

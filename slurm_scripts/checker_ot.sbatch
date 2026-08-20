@@ -19,7 +19,6 @@ CONFIG_PATH="configs.checker"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/checker_ot"
 PROJECT_NAME="self-distill-flow-maps-minibatch-ot"
 OT_METHOD="sinkhorn"
-OT_CHUNK_SIZE=256
 
 mkdir -p "${OUTPUT_FOLDER}"
 
@@ -61,10 +60,8 @@ echo "Batch Size: 100,000"
 echo "Total Steps: 100,000"
 echo "lambda_reg: 0.0 (Monge gap disabled, true no-op)"
 echo "ot_coupling: ${OT_METHOD} (minibatch OT-CFM / SB-CFM)"
-echo "ot_chunk_size: ${OT_CHUNK_SIZE}"
 echo "GPUs: 4x RTX 6000 (jax.device_count() picks all of them up for training;"
-echo "  the Sinkhorn block loop itself still runs one block at a time, on"
-echo "  whichever device jax defaults to -- it is not pmap'd across GPUs)"
+echo "  the Sinkhorn solve itself runs once over the full batch, pinned to CPU)"
 echo "Config: ${CONFIG_PATH}"
 echo "Output: ${OUTPUT_FOLDER}"
 echo "=========================================="
@@ -92,9 +89,8 @@ python launchers/learn.py \
     --output_folder "${OUTPUT_FOLDER}" \
     --lambda_reg_override 0.0 \
     --ot_coupling_override "${OT_METHOD}" \
-    --ot_chunk_size_override ${OT_CHUNK_SIZE} \
     --wandb_project_override "${PROJECT_NAME}" \
-    --wandb_name_additional "ot_${OT_METHOD}_chunk${OT_CHUNK_SIZE}" \
+    --wandb_name_additional "ot_${OT_METHOD}" \
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"

@@ -20,9 +20,6 @@ PROJECT_NAME="self-distill-flow-maps-minibatch-ot"
 
 mkdir -p "${OUTPUT_FOLDER}"
 OT_METHOD="sinkhorn"
-OT_CHUNK_SIZE=128
-
-# Hungarian solves for OT_METHOD=exact (ignored for OT_METHOD=sinkhorn)
 
 # Map array task ID to experiment
 SLURM_ID=${SLURM_ARRAY_TASK_ID}
@@ -63,7 +60,6 @@ echo "Stopgrad Type: ${STOPGRAD}"
 echo "Sampling: ${SAMPLING}"
 echo "Diagonal Fraction: 0.75 (75%)"
 echo "ot_coupling: ${OT_METHOD} (minibatch OT-CFM)"
-echo "ot_chunk_size: ${OT_CHUNK_SIZE}"
 echo "Config: ${CONFIG_PATH}"
 nvidia-smi --query-gpu=name,memory.total --format=csv
 echo "Output: ${OUTPUT_FOLDER}"
@@ -90,9 +86,8 @@ python -u launchers/learn.py \
     --dataset_location "${DATASET_LOCATION}" \
     --output_folder "${OUTPUT_FOLDER}" \
     --ot_coupling_override "${OT_METHOD}" \
-    --ot_chunk_size_override ${OT_CHUNK_SIZE} \
     --wandb_project_override "${PROJECT_NAME}" \
-    --wandb_name_additional "ot_${OT_METHOD}_chunk${OT_CHUNK_SIZE}"
+    --wandb_name_additional "ot_${OT_METHOD}"
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"
