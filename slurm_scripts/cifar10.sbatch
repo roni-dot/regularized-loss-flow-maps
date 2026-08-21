@@ -2,10 +2,9 @@
 #SBATCH --job-name=loss_method_comp
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=01-00:00
-#SBATCH --qos=pakman
-#SBATCH --partition=rtx6000
-#SBATCH --gres=gpu:rtx_6000:4
+#SBATCH --time=08-00:00
+#SBATCH --qos=main
+#SBATCH --gres=gpu:rtx_pro_6000:2
 #SBATCH --mem=64GB
 #SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.out
 #SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.err
