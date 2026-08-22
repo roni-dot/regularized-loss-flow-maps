@@ -2,9 +2,10 @@
 #SBATCH --job-name=loss_method_comp
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=08-00:00
-#SBATCH --qos=main
-#SBATCH --gres=gpu:rtx_pro_6000:2
+#SBATCH --time=06-00:00
+#SBATCH --qos=pakman
+#SBATCH --partition=rtx6000
+#SBATCH --gres=gpu:rtx_6000:4
 #SBATCH --mem=64GB
 #SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.out
 #SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.err
@@ -69,6 +70,7 @@ conda activate flow_maps || { echo "ACTIVATE FAILED"; exit 1; }
 export PYTHONNOUSERSITE=1
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_MEM_FRACTION=.95
 
 # Change to project directory
 cd $PY_DIR || exit

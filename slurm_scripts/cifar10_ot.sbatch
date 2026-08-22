@@ -16,7 +16,7 @@ PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.cifar10"
 DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/outputs"
-PROJECT_NAME="self-distill-flow-maps-minibatch-ot-sinkhorn-coupling-repair"
+PROJECT_NAME="self-distill-flow-maps-minibatch-ot-sinkhorn-coupling-repair-2000-max-iter"
 
 mkdir -p "${OUTPUT_FOLDER}"
 OT_METHOD="sinkhorn"
@@ -87,7 +87,7 @@ python -u launchers/learn.py \
     --output_folder "${OUTPUT_FOLDER}" \
     --ot_coupling_override "${OT_METHOD}" \
     --wandb_project_override "${PROJECT_NAME}" \
-    --wandb_name_additional "ot_${OT_METHOD}"
+    --wandb_name_additional "ot_${OT_METHOD}_2000_max_iter" 
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"
