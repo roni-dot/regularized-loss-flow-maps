@@ -6,6 +6,7 @@
 #SBATCH --qos=pakman
 #SBATCH --partition=rtx6000
 #SBATCH --gres=gpu:rtx_6000:4
+#SBATCH -w ise-6000-03
 #SBATCH --mem=64GB
 #SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.out
 #SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.err
@@ -20,6 +21,7 @@ CONFIG_PATH="configs.cifar10"
 DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
 OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/outputs"
 PROJECT_NAME="self-distill-flow-maps-cifar10-baseline"
+mkdir -p "${OUTPUT_FOLDER}"
 
 # Map array task ID to experiment
 SLURM_ID=${SLURM_ARRAY_TASK_ID}

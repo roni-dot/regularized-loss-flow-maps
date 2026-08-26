@@ -1,36 +1,35 @@
 #!/bin/bash
-#SBATCH --job-name=cifar10_diag75_fid
-#SBATCH --account=kempner_albergo_lab
-#SBATCH --partition=kempner
+#SBATCH --job-name=cifar10_ot_diag75_fid
+#SBATCH --qos=normal
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00-00:20
-#SBATCH --gres=gpu:1  # Single A100 per job
+#SBATCH --time=00-03:20
+#SBATCH --gres=gpu:rtx_6000:1  
 #SBATCH --mem=64GB
-#SBATCH --output=/n/netscratch/albergo_lab/Everyone/nmboffi/cifar10/diag75/fids/logs/cifar10_fid_%A_%a.out
-#SBATCH --error=/n/netscratch/albergo_lab/Everyone/nmboffi/cifar10/diag75/fids/logs/cifar10_fid_%A_%a.err
-#SBATCH --array=0-134  # 3 methods × 9 checkpoints × 5 sampling steps × 1 EMA = 135 jobs
+#SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/fids/logs/cifar10_fid_%A_%a.out
+#SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/fids/logs/cifar10_fid_%A_%a.err
+#SBATCH --array=0-44  # 3 methods × 9 checkpoints × 5 sampling steps × 1 EMA = 135 jobs
 
 ## Create output directories if they don't exist
-mkdir -p /n/netscratch/albergo_lab/Everyone/nmboffi/cifar10/diag75/fids/logs
+mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/fids/logs
 
 ## Configuration
-PY_DIR=/n/home04/nboffi/flow-maps/py
-STATS_PATH="/n/holylabs/LABS/albergo_lab/Everyone/nmboffi/datasets/cifar10/cifar_stats.npz"
-OUTPUT_DIR="/n/netscratch/albergo_lab/Everyone/nmboffi/cifar10/diag75/fids"
-CHECKPOINT_BASE="/n/netscratch/albergo_lab/Everyone/nmboffi/cifar10/diag75"
+PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
+STATS_PATH="/home/ronimaor/regularized-loss-flow-maps/datasets/cifar10/cifar_stats.npz"
+OUTPUT_DIR="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/fids"
+CHECKPOINT_BASE="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/outputs"
 
 # Define the three experiments we're interested in
 # 0: LSD convex with uniform_upper_triangle (from 9_2 config)
 # 1: PSD uniform with uniform_upper_triangle (from 9_4 config)
 # 2: PSD midpoint with uniform_upper_triangle (from 9_4 config)
-EXPERIMENTS=(0 1 2)
+EXPERIMENTS=(0)
 
 # Checkpoints from 9 to 33 in increments of 3
 CHECKPOINT_ITERS=(9 12 15 18 21 24 27 30 33)
 SAMPLING_STEPS=(1 2 4 8 16)
-EMA_FACTORS=(0.9999)
+EMA_FACTORS=(0.999)
 
 # Calculate dimensions for decomposition
 N_EXPERIMENTS=${#EXPERIMENTS[@]}
@@ -57,8 +56,8 @@ case $EXPERIMENT in
 0)
     # LSD convex with uniform_upper_triangle from 9_2 config
     # IMPORTANT: The checkpoint name says diag90 but it's actually diag75 (naming error in config)
-    CHECKPOINT_NAME="cifar10_lsd_uniform_mean=none_std=none_diag90_9_2"
-    CONFIG_PATH="configs.9_2_25_cifar10_sampling_strategy_comparison"
+    CHECKPOINT_NAME="cifar10_paper_lsd"
+    CONFIG_PATH="configs.cifar10"
     SLURM_ID=0  # First experiment in 9_2 config (uniform_upper_triangle)
     METHOD_DESC="LSD convex uniform_upper_triangle"
     ;;
@@ -87,7 +86,7 @@ BATCH_SIZE=256
 
 # Print job info
 echo "=========================================="
-echo "CIFAR-10 diag75 FID Calculation"
+echo "CIFAR-10 ot sinkhorn coupling repair FID Calculation"
 echo "SLURM Job ID: ${SLURM_JOB_ID}"
 echo "SLURM Array Task ID: ${SLURM_ARRAY_TASK_ID}"
 echo "Method: ${METHOD_DESC}"
@@ -99,22 +98,13 @@ echo "EMA Factor: ${EMA_FAC}"
 echo "Checkpoint Path: ${CHECKPOINT_PATH}"
 echo "=========================================="
 
-# Load modules
 module purge
-module load gcc/12.2.0-fasrc01
+source /storage/modules/packages/anaconda/etc/profile.d/conda.sh
+conda activate flow_maps || { echo "ACTIVATE FAILED"; exit 1; }
+export PYTHONNOUSERSITE=1
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
 
-# Hook conda/mamba into the shell and activate env
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate jax_3_17_25
-
-# Fix library path to prioritize conda environment libraries over system ones
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-
-# Suppress duplicate CUDA plugin registration warnings
-export TF_CPP_VMODULE=cuda_dnn=0,cuda_blas=0
-
-# Enable Python unbuffered output for better debugging
-export PYTHONUNBUFFERED=1
 
 # Change to project directory
 cd $PY_DIR || exit
