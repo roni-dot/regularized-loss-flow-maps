@@ -51,7 +51,7 @@ def get_config(
 
     # monge gap config
     config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
-    config.training.mg_batch_size = 512  # Batch size for Monge gap computation
+    config.training.mg_batch_size = 128  # Batch size for Monge gap computation
     config.training.lambda_reg = 0.0
     config.training.sinkhorn_max_iter = 2000
     config.training.sinkhorn_relative_epsilon = None
