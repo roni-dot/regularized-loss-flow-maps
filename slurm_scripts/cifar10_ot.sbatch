@@ -1,27 +1,25 @@
 #!/bin/bash
-#SBATCH --job-name=loss_method_comp
+#SBATCH --job-name=cifar10_ot
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=06-00:00
+#SBATCH --time=04-00:00
 #SBATCH --qos=pakman
 #SBATCH --partition=rtx6000
 #SBATCH --gres=gpu:rtx_6000:4
-#SBATCH -w ise-6000-03
 #SBATCH --mem=64GB
-#SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.out
-#SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/loss_method_%A_%a.err
+#SBATCH --output=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/loss_method_%A_%a.out
+#SBATCH --error=/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/loss_method_%A_%a.err
 #SBATCH --array=0  # 4 experiments: LSD convex, PSD uniform, PSD midpoint, ESD full
-
-## Create output directories if they don't exist
-mkdir -p /home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/logs
 
 ## Configuration
 PY_DIR=/home/ronimaor/regularized-loss-flow-maps/py
 CONFIG_PATH="configs.cifar10"
 DATASET_LOCATION="/home/ronimaor/regularized-loss-flow-maps/datasets"
-OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_baseline/outputs"
-PROJECT_NAME="self-distill-flow-maps-cifar10-baseline"
+OUTPUT_FOLDER="/home/ronimaor/regularized-loss-flow-maps/outputs/cifar10_ot_sinkhorn_coupling_repair/outputs"
+PROJECT_NAME="self-distill-flow-maps-minibatch-ot-sinkhorn-coupling-repair-2000-max-iter"
+
 mkdir -p "${OUTPUT_FOLDER}"
+OT_METHOD="sinkhorn"
 
 # Map array task ID to experiment
 SLURM_ID=${SLURM_ARRAY_TASK_ID}
@@ -54,13 +52,14 @@ esac
 
 # Print job info
 echo "=========================================="
-echo "Loss Method Comparison Training"
+echo "Minibatch OT-CFM coupling repair Loss Method Comparison Training"
 echo "SLURM Job ID: ${SLURM_JOB_ID}"
 echo "SLURM Array Task ID: ${SLURM_ARRAY_TASK_ID}"
 echo "Method: ${METHOD}"
 echo "Stopgrad Type: ${STOPGRAD}"
 echo "Sampling: ${SAMPLING}"
 echo "Diagonal Fraction: 0.75 (75%)"
+echo "ot_coupling: ${OT_METHOD} (minibatch OT-CFM)"
 echo "Config: ${CONFIG_PATH}"
 nvidia-smi --query-gpu=name,memory.total --format=csv
 echo "Output: ${OUTPUT_FOLDER}"
@@ -72,7 +71,6 @@ conda activate flow_maps || { echo "ACTIVATE FAILED"; exit 1; }
 export PYTHONNOUSERSITE=1
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
-export XLA_PYTHON_CLIENT_MEM_FRACTION=.95
 
 # Change to project directory
 cd $PY_DIR || exit
@@ -87,7 +85,9 @@ python -u launchers/learn.py \
     --slurm_id ${SLURM_ID} \
     --dataset_location "${DATASET_LOCATION}" \
     --output_folder "${OUTPUT_FOLDER}" \
-    --wandb_project_override "${PROJECT_NAME}"
+    --ot_coupling_override "${OT_METHOD}" \
+    --wandb_project_override "${PROJECT_NAME}" \
+    --wandb_name_additional "ot_${OT_METHOD}_2000_max_iter" 
 
 echo "=========================================="
 echo "Job completed. Check the following for results:"

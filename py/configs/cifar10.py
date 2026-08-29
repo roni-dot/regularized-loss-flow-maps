@@ -43,11 +43,17 @@ def get_config(
     config.training.ema_facs = [0.999, 0.9999]
     config.training.ndevices = jax.device_count()
 
+    # minibatch optimal transport coupling (OT-CFM); None leaves the
+    # existing independent x0/x1 pairing unchanged
+    config.training.ot_coupling = None  # or "exact" / "sinkhorn"
+    config.training.ot_chunk_size = 256
+    config.training.ot_n_jobs = 1  # worker processes for method="exact"
+
     # monge gap config
     config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
     config.training.mg_batch_size = 512  # Batch size for Monge gap computation
     config.training.lambda_reg = 0.0
-    config.training.sinkhorn_max_iter = 200
+    config.training.sinkhorn_max_iter = 2000
     config.training.sinkhorn_relative_epsilon = None
     config.training.sinkhorn_eps = 0.5
 

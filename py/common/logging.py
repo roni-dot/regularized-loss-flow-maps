@@ -314,6 +314,7 @@ def log_metrics(
     prng_key: jnp.ndarray,
     step_time: float,
     aux: dict = None,
+    extra_metrics: dict = None,
 ) -> jnp.ndarray:
     """Log some metrics to wandb, make a figure, and checkpoint the parameters."""
 
@@ -345,6 +346,24 @@ def log_metrics(
             metrics["mg_converged"] = float(dist_utils.safe_index(cfg, aux["mg_converged"]))
         if "mg_n_iters" in aux:
             metrics["mg_n_iters"] = float(dist_utils.safe_index(cfg, aux["mg_n_iters"]))
+        if "frac_offdiag_degenerate" in aux:
+            metrics["frac_offdiag_degenerate"] = float(
+                dist_utils.safe_index(cfg, aux["frac_offdiag_degenerate"])
+                    )
+        if "mean_gap_offdiag" in aux:
+            metrics["mean_gap_offdiag"] = float(
+                dist_utils.safe_index(cfg, aux["mean_gap_offdiag"])
+            )
+
+    # Metrics computed on the host, outside the jitted loss (e.g. the OT
+    # coupling diagnostics from loss_args.get_loss_fn_args). These are
+    # plain Python floats already, not per-device pytree leaves, so they
+    # bypass dist_utils.safe_index and are merged straight into this same
+    # wandb.log call -- logging them via a separate wandb.log elsewhere
+    # would advance the global step counter and desync them from the rest
+    # of this step's metrics.
+    if extra_metrics:
+        metrics.update(extra_metrics)
 
     # Compute FID on-the-fly if enabled and at the right frequency
     if (

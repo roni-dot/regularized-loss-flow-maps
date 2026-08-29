@@ -45,6 +45,11 @@ def get_config(
     config.training.ema_facs = [0.999, 0.9999]
     config.training.ndevices = jax.device_count()
 
+    # minibatch optimal transport coupling (OT-CFM); None leaves the
+    # existing independent x0/x1 pairing unchanged
+    config.training.ot_coupling = None
+    config.training.ot_chunk_size = 256
+
     # monge gap config
     config.training.monge_num_pairs = 1  # Number of independent (s, t) pairs for Monge gap
     config.training.mg_batch_size = 512  # Batch size for Monge gap computation

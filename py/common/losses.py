@@ -474,6 +474,14 @@ def setup_loss(
             "mg_mean_cost": mg_mean_cost,
             "mg_converged": mg_converged,
             "mg_n_iters": mg_n_iters,
+            "frac_offdiag_degenerate": (
+                    jnp.mean((s[diag_bs:] == t[diag_bs:]).astype(jnp.float32))
+                    if offdiag_bs > 0 else jnp.array(0.0)
+                ),
+            "mean_gap_offdiag": (
+                jnp.mean(t[diag_bs:] - s[diag_bs:])
+                if offdiag_bs > 0 else jnp.array(0.0)
+            ),
         }
 
     return loss

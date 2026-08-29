@@ -61,7 +61,7 @@ def train_loop(
     for _ in pbar:
         # construct loss function arguments
         start_time = time.time()
-        loss_fn_args, prng_key = statics.get_loss_fn_args(
+        loss_fn_args, prng_key, extra_metrics = statics.get_loss_fn_args(
             cfg, statics, train_state, prng_key
         )
 
@@ -85,6 +85,7 @@ def train_loop(
             prng_key,
             end_time - start_time,
             aux,
+            extra_metrics,
         )
 
         pbar.set_postfix(loss=loss_value)
@@ -127,6 +128,27 @@ def parse_command_line_arguments():
         help="Override config.training.monge_num_pairs",
     )
     parser.add_argument(
+        "--ot_coupling_override",
+        type=str,
+        default=None,
+        choices=["none", "exact", "sinkhorn"],
+        help="Override config.training.ot_coupling ('none' disables it)",
+    )
+    parser.add_argument(
+        "--ot_chunk_size_override",
+        type=int,
+        default=None,
+        help="Override config.training.ot_chunk_size (ot_coupling='exact' only; "
+        "'sinkhorn' always solves the full batch)",
+    )
+    parser.add_argument(
+        "--ot_n_jobs_override",
+        type=int,
+        default=None,
+        help="Override config.training.ot_n_jobs (worker processes for "
+        "ot_coupling='exact'; ignored for 'sinkhorn')",
+    )
+    parser.add_argument(
             "--wandb_project_override",
             type=str,
             default=None,
@@ -157,6 +179,14 @@ def setup_config_dict():
         cfg.training.sinkhorn_eps = args.sinkhorn_eps_override
     if args.monge_num_pairs_override is not None:
         cfg.training.monge_num_pairs = args.monge_num_pairs_override
+    if args.ot_coupling_override is not None:
+        cfg.training.ot_coupling = (
+            None if args.ot_coupling_override == "none" else args.ot_coupling_override
+        )
+    if args.ot_chunk_size_override is not None:
+        cfg.training.ot_chunk_size = args.ot_chunk_size_override
+    if args.ot_n_jobs_override is not None:
+        cfg.training.ot_n_jobs = args.ot_n_jobs_override
     if args.wandb_project_override is not None:
         cfg.logging.wandb_project = args.wandb_project_override
     if args.wandb_name_additional is not None:
