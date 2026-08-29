@@ -67,10 +67,32 @@ def _concat_diag_offdiag(
     t_diag: jnp.ndarray,
     s_offdiag: jnp.ndarray,
     t_offdiag: jnp.ndarray,
+    ndevices: int = 1,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Concatenate diagonal and off-diagonal samples."""
-    sbatch = jnp.concatenate([s_diag, s_offdiag])
-    tbatch = jnp.concatenate([t_diag, t_offdiag])
+    """Concatenate diagonal and off-diagonal samples.
+
+    With ndevices > 1, dist_utils.replicate_batch shards by reshaping to
+    (ndevices, -1, ...), so each device gets a *contiguous* block. A plain
+    [all diag; all offdiag] concatenation therefore hands whole devices a
+    single kind of sample, while losses.py re-derives the split from the
+    per-device batch size and slices positionally -- so most off-diagonal
+    slots end up holding s == t samples, where lsd_term is identically zero
+    (X_{s,s} = x and dt_X|_{t=s} = calc_b(s, x) by construction). At bs=512
+    on 4 devices only 32/128 off-diagonal slots carried real samples.
+
+    Interleaving in per-device blocks makes each shard hold the intended
+    mixture.
+    """
+    if ndevices > 1:
+        s_diag = s_diag.reshape(ndevices, -1)
+        t_diag = t_diag.reshape(ndevices, -1)
+        s_offdiag = s_offdiag.reshape(ndevices, -1)
+        t_offdiag = t_offdiag.reshape(ndevices, -1)
+        sbatch = jnp.concatenate([s_diag, s_offdiag], axis=1).reshape(-1)
+        tbatch = jnp.concatenate([t_diag, t_offdiag], axis=1).reshape(-1)
+    else:
+        sbatch = jnp.concatenate([s_diag, s_offdiag])
+        tbatch = jnp.concatenate([t_diag, t_offdiag])
     return sbatch, tbatch
 
 
@@ -114,7 +136,7 @@ def get_loss_fn_args_randomness(
             else (jnp.array([]), jnp.array([]))
         )
 
-        sbatch, tbatch = _concat_diag_offdiag(s_diag, t_diag, s_offdiag, t_offdiag)
+        sbatch, tbatch = _concat_diag_offdiag(s_diag, t_diag, s_offdiag, t_offdiag, cfg.training.ndevices)
 
     if cfg.training.psd_type == "midpoint":
         ubatch = 0.5 * (sbatch + tbatch)
@@ -215,6 +237,19 @@ def get_loss_fn_args(
 
     # Normal batch splitting
     diag_bs, offdiag_bs = _get_diag_offdiag_bs(cfg, bs)
+
+    nd = cfg.training.ndevices
+    if nd > 1:
+        assert bs % nd == 0, f"bs ({bs}) not divisible by ndevices ({nd})"
+        assert diag_bs % nd == 0 and offdiag_bs % nd == 0, (
+            f"diag_bs ({diag_bs}) and offdiag_bs ({offdiag_bs}) must each be "
+            f"divisible by ndevices ({nd}) for per-device interleaving"
+        )
+        local_diag_bs, _ = _get_diag_offdiag_bs(cfg, bs // nd)
+        assert local_diag_bs == diag_bs // nd, (
+            f"per-device split mismatch: losses.py uses {local_diag_bs} diagonal "
+            f"samples per device, interleaving supplies {diag_bs // nd}"
+        )
 
     # drew randomness needed for the objective
     (

@@ -346,6 +346,14 @@ def log_metrics(
             metrics["mg_converged"] = float(dist_utils.safe_index(cfg, aux["mg_converged"]))
         if "mg_n_iters" in aux:
             metrics["mg_n_iters"] = float(dist_utils.safe_index(cfg, aux["mg_n_iters"]))
+        if "frac_offdiag_degenerate" in aux:
+            metrics["frac_offdiag_degenerate"] = float(
+                dist_utils.safe_index(cfg, aux["frac_offdiag_degenerate"])
+                    )
+        if "mean_gap_offdiag" in aux:
+            metrics["mean_gap_offdiag"] = float(
+                dist_utils.safe_index(cfg, aux["mean_gap_offdiag"])
+            )
 
     # Metrics computed on the host, outside the jitted loss (e.g. the OT
     # coupling diagnostics from loss_args.get_loss_fn_args). These are
