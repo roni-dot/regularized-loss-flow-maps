@@ -718,7 +718,7 @@ def eval_monge_gap_metrics(
     s_vec, t_vec = _eval_st_grid()
 
     def gap_for_pair(s, t) -> float:
-        gap, _, _ = monge_gap_reg.compute_monge_gap_reg(
+        gap, _, _, _, _ = monge_gap_reg.compute_monge_gap_reg(
             params,
             statics.net,
             statics.interp,

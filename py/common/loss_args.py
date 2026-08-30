@@ -399,14 +399,7 @@ def get_loss_fn_args(
 def _sample_mg_pairs(
     key: jnp.ndarray, K: int, tmin: float, tmax: float
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Single fixed (s, t) = (tmin, tmax) pair for the Monge gap regularizer.
-
-    The Monge gap only needs to approximate the path between noise (tmin) and
-    data (tmax); randomly resampling (s, t) each step adds noise on top of the
-    entropic gap estimator's own noise without adding signal. Fixed to the
-    endpoints instead. `key` and `K` are unused, kept for call-site compat.
-    """
-    del key, K
-    s_vec = jnp.array([tmin])
-    t_vec = jnp.array([tmax])
-    return s_vec, t_vec
+    k1, k2 = jax.random.split(key)
+    a = jax.random.uniform(k1, shape=(K,), minval=tmin, maxval=tmax)
+    b = jax.random.uniform(k2, shape=(K,), minval=tmin, maxval=tmax)
+    return jnp.minimum(a, b), jnp.maximum(a, b)

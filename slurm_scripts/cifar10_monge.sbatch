@@ -27,7 +27,7 @@ mkdir -p "${OUTPUT_FOLDER}"
 # diag/offdiag multi-GPU interleaving fix). No OT coupling override is
 # passed -- configs.cifar10 already defaults ot_coupling=None.
 LAMBDA_REG=0.1
-SINKHORN_EPS=0.1
+SINKHORN_EPS=1e-4 
 MONGE_NUM_PAIRS=1  # currently inert: _sample_mg_pairs always uses a single
                    # fixed (tmin, tmax) pair regardless of this value
 MG_BATCH=128
@@ -93,6 +93,7 @@ cd $PY_DIR || exit
 echo "Starting training..."
 echo "Configuration: ${CONFIG_PATH}"
 echo "Output folder: ${OUTPUT_FOLDER}"
+echo "relative_eps: mean"
 
 # Run training with the Monge gap regularizer enabled (no OT coupling)
 python -u launchers/learn.py \

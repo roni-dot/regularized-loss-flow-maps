@@ -49,9 +49,6 @@ def compute_monge_gap_reg(
         I_s_flat = I_s.reshape(n_points, -1)
         X_st_flat = X_st.reshape(n_points, -1)
 
-        geom_check = pointcloud.PointCloud(I_s_flat, X_st_flat, cost_fn=cost_fn,
-                                   epsilon=epsilon, relative_epsilon=relative_epsilon)
-
         div, out = sd.sinkdiv(
             I_s_flat, X_st_flat,
             cost_fn=cost_fn,
